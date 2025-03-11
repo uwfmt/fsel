@@ -1,6 +1,6 @@
-# fargs — helper for manipulating file selection in a shell
+# fargs — a utility for managing file selections in a shell
 
-A utility to manage file selections for batch operations in Linux environments. Store, retrieve, and manipulate file lists between different command runs. It keeps the list persistently until you remove it explicitly.
+A CLI utility to manage file selections for batch operations in Linux environments. Store, retrieve, and manipulate file lists between different command runs. It keeps the list persistently until you remove it explicitly.
 
 ## Features
 
@@ -36,6 +36,9 @@ fargs append *.log /var/log/**/*.tmp
 
 # Add more to the existing list
 ls -1 *.bak | fargs append
+
+# Even more
+fzf -m | fargs append
 
 # Output list
 for f in `fargs out`; do mv $f /var/archive; done
