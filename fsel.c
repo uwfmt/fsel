@@ -32,9 +32,14 @@
 #define TEMP_FILE_TEMPLATE "/tmp/fsel_%d.tmp"
 #define INDEX_FILE_TEMPLATE "/tmp/fsel_%d.idx"
 
+// Command line flags
+#define FORCE_FLAG 0x01
+#define QUIET_FLAG 0x02
+#define SORT_FLAG 0x04
+#define CLEAR_FLAG 0x08
+
 char temp_filename[256];
 char index_filename[256];
-int quiet = 0;
 
 void compute_hash(const char* path, unsigned char* hash) {
     EVP_MD_CTX* ctx = EVP_MD_CTX_new();
@@ -112,13 +117,22 @@ void remove_lock_file() {
     unlink(LOCK_FILE);
 }
 
-int append_mode(int argc, char** argv, int force, int quiet) {
-    if (lock_file_exists() && !force) {
+char* safe_strdup(const char* str) {
+    char* new_str = strdup(str);
+    if (!new_str) {
+        perror("Failed to allocate memory");
+        exit(EXIT_FAILURE);
+    }
+    return new_str;
+}
+
+int append_mode(int argc, char** argv, int flags) {
+    if (lock_file_exists() && !(flags & FORCE_FLAG)) {
         fprintf(stderr, "Error: Lock file exists\n");
         return -1;
     }
 
-    if (create_lock_file(force) != 0) {
+    if (create_lock_file(flags & FORCE_FLAG) != 0) {
         return -1;
     }
 
@@ -162,7 +176,7 @@ int append_mode(int argc, char** argv, int force, int quiet) {
     fclose(temp_file);
     fclose(index_file);
 
-    if (!quiet) {
+    if (!(flags & QUIET_FLAG)) {
         struct stat st;
         int total = 0;
         if (stat(index_filename, &st) == 0) {
@@ -175,13 +189,13 @@ int append_mode(int argc, char** argv, int force, int quiet) {
     return 0;
 }
 
-int replace_mode(int argc, char** argv, int force, int quiet) {
-    if (lock_file_exists() && !force) {
+int replace_mode(int argc, char** argv, int flags) {
+    if (lock_file_exists() && !(flags & FORCE_FLAG)) {
         fprintf(stderr, "Error: Lock file exists\n");
         return -1;
     }
 
-    if (create_lock_file(force) != 0) {
+    if (create_lock_file(flags & FORCE_FLAG) != 0) {
         return -1;
     }
 
@@ -202,24 +216,26 @@ int replace_mode(int argc, char** argv, int force, int quiet) {
     fclose(index_file);
     remove_lock_file();
 
-    int result = append_mode(argc, argv, force, quiet);
-    return result;
+    return append_mode(argc, argv, flags);
 }
 
-int out_mode(int sort_flag, int clear_flag, int force) {
-    if (lock_file_exists() && !force) {
+int out_mode(int _, char** __, int flags) {
+    (void)_;
+    (void)__;
+
+    if (lock_file_exists() && !(flags & FORCE_FLAG)) {
         fprintf(stderr, "Error: Lock file exists\n");
         return -1;
     }
 
-    if (clear_flag && create_lock_file(force) != 0) {
+    if (flags & CLEAR_FLAG && create_lock_file(flags & FORCE_FLAG) != 0) {
         return -1;
     }
 
     FILE* temp_file = fopen(temp_filename, "r");
     if (!temp_file) {
         perror("Failed to open temp file");
-        if (clear_flag)
+        if (flags & CLEAR_FLAG)
             remove_lock_file();
         return -1;
     }
@@ -228,13 +244,13 @@ int out_mode(int sort_flag, int clear_flag, int force) {
     size_t len = 0;
     ssize_t read;
 
-    if (sort_flag) {
+    if (flags & SORT_FLAG) {
         char** lines = NULL;
         size_t count = 0;
 
         while ((read = getline(&line, &len, temp_file)) != -1) {
             lines = realloc(lines, (count + 1) * sizeof(char*));
-            lines[count] = strdup(line);
+            lines[count] = safe_strdup(line);
             count++;
         }
 
@@ -254,7 +270,7 @@ int out_mode(int sort_flag, int clear_flag, int force) {
     free(line);
     fclose(temp_file);
 
-    if (clear_flag) {
+    if (flags & CLEAR_FLAG) {
         unlink(temp_filename);
         unlink(index_filename);
         remove_lock_file();
@@ -263,13 +279,16 @@ int out_mode(int sort_flag, int clear_flag, int force) {
     return 0;
 }
 
-int clear_mode(int force) {
-    if (lock_file_exists() && !force) {
+int clear_mode(int _, char** __, int flags) {
+    (void)_;
+    (void)__;
+
+    if (lock_file_exists() && !(flags & FORCE_FLAG)) {
         fprintf(stderr, "Error: Lock file exists\n");
         return -1;
     }
 
-    if (create_lock_file(force) != 0) {
+    if (create_lock_file(flags & FORCE_FLAG) != 0) {
         return -1;
     }
 
@@ -315,10 +334,30 @@ void print_help() {
            "  -h          Show this help\n");
 }
 
+// For simple mode handling all modes use the same signature
+typedef struct {
+    const char* name;
+    int (*func)(int, char**, int);
+} Command;
+
+Command commands[] = {{"save", append_mode}, {"s", append_mode}, {"replace", replace_mode},
+                      {"r", replace_mode},   {"out", out_mode},  {"o", out_mode},
+                      {"clear", clear_mode}, {"c", clear_mode},  {"unlock", unlock_mode},
+                      {"u", unlock_mode},    {NULL, NULL}};
+
+Command* find_command(const char* name) {
+    for (int i = 0; commands[i].name; i++) {
+        if (strcmp(commands[i].name, name) == 0) {
+            return &commands[i];
+        }
+    }
+    return NULL;
+}
+
 int main(int argc, char** argv) {
     if (argc < 2) {
         print_help();
-        return 1;
+        return EXIT_FAILURE;
     }
 
     int uid = getuid();
@@ -326,53 +365,48 @@ int main(int argc, char** argv) {
     snprintf(index_filename, sizeof(index_filename), INDEX_FILE_TEMPLATE, uid);
 
     int opt;
-    int force = 0, sort_flag = 0, clear_flag = 0;
+    int flags = 0;
 
     while ((opt = getopt(argc, argv, "qofch")) != -1) {
         switch (opt) {
             case 'q':
-                quiet = 1;
+                flags |= QUIET_FLAG;
                 break;
             case 'o':
-                sort_flag = 1;
+                flags |= SORT_FLAG;
                 break;
             case 'f':
-                force = 1;
+                flags |= FORCE_FLAG;
                 break;
             case 'c':
-                clear_flag = 1;
+                flags |= CLEAR_FLAG;
                 break;
             case 'h':
                 print_help();
                 return 0;
             default:
                 fprintf(stderr, "Invalid option\n");
-                return 1;
+                return EXIT_FAILURE;
         }
     }
 
     if (optind >= argc) {
         fprintf(stderr, "No command specified\n");
         print_help();
-        return 1;
+        return EXIT_FAILURE;
     }
 
     char* command = argv[optind];
     argc -= optind + 1;
     argv += optind + 1;
 
-    if (strcmp(command, "save") == 0 || strcmp(command, "s") == 0) {
-        return append_mode(argc, argv, force, quiet);
-    } else if (strcmp(command, "replace") == 0 || strcmp(command, "r") == 0) {
-        return replace_mode(argc, argv, force, quiet);
-    } else if (strcmp(command, "out") == 0 || strcmp(command, "o") == 0) {
-        return out_mode(sort_flag, clear_flag, force);
-    } else if (strcmp(command, "clear") == 0 || strcmp(command, "c") == 0) {
-        return clear_mode(force);
-    } else if (strcmp(command, "unlock") == 0 || strcmp(command, "u") == 0) {
-        return unlock_mode();
+    Command* cmd = find_command(command);
+    if (cmd) {
+        return cmd->func(argc, argv, flags);
     } else {
         fprintf(stderr, "Invalid command\n");
-        return 1;
+        return EXIT_FAILURE;
     }
+
+    return EXIT_SUCCESS;
 }
