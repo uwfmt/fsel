@@ -4,13 +4,33 @@ A CLI utility to manage file selections for batch operations in Linux
 environments. Store, retrieve, and manipulate file lists between different
 command runs. It keeps the list persistently until you remove it explicitly.
 
+## Why?
+
+Unix command-line utilities provide basic file operations such as copy, move,
+rename, and delete, but lack a "select" operation. This utility fills that gap
+by adding a "select" feature to the standard set of operations that available in
+CLI. It just makes CLI file management great again!
+
+Imagine you need to select hundreds/thousand of files scattered across various
+directories and add them as arguments to a simple command like `cp`. Navigating
+through directories with all the masks (like "?*") and even modern autocomplete
+features makes this task cumbersome for editing, unless you're using a dedicated
+file manager (like `Midnight Commander`, `Ranger` and so on).
+
+With `fsel` and powerful search utilities with filtering, such as `fzf`, you
+can easily compile the necessary list of files, iterating as needed and moving
+through the file tree. Finally, you can use this list in a shell script or a
+specific command (for example, in a loop: `for f in $(fsel o); do cp -a "$f";
+done`).
+
 ## Features
 
 - Preserve selection between command calls using temporary files
 - Accept arguments via stdin pipeline or as file arguments, including globbing
   pattern expansion
 - Implement lockfile mechanism to prevent concurrency collisions
-- Optimized for large selections (uses index-based deduplication)
+- Suited for really large selections (keep data on disk + uses index-based
+  deduplication).
 
 ## Installation
 
