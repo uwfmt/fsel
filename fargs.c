@@ -301,7 +301,7 @@ int unlock_mode() {
 void print_help() {
     printf("Usage: fargs [options] <command> [paths...]\n"
            "Commands:\n"
-           "  append, a   Add paths to the selection\n"
+           "  save, s     Save paths to the selection\n"
            "  replace, r  Replace the selection with new paths\n"
            "  out, o      Output the selection\n"
            "  clear, c    Clear the selection\n"
@@ -361,7 +361,7 @@ int main(int argc, char** argv) {
     argc -= optind + 1;
     argv += optind + 1;
 
-    if (strcmp(command, "append") == 0 || strcmp(command, "a") == 0) {
+    if (strcmp(command, "save") == 0 || strcmp(command, "s") == 0) {
         return append_mode(argc, argv, force, quiet);
     } else if (strcmp(command, "replace") == 0 || strcmp(command, "r") == 0) {
         return replace_mode(argc, argv, force, quiet);

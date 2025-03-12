@@ -10,17 +10,17 @@ fargs \- manage file lists for batch operations
 \fBfargs\fP is a disk-based file list manager for Linux that handles file path storage, deduplication and retrieval. Designed for large-scale file operations with minimal memory usage. Treat it as a selection for a file manager. You pick up files from different places, then pass the selection to other commands for file operations.
 .SH COMMANDS
 .TP
-.B append, a
-Add files/directories to existing list. Accepts glob patterns and stdin.
+.B save, s
+Save files/directories to selection. Accepts glob patterns and stdin.
 .TP
 .B replace, r
-Overwrite existing list with new paths. Creates lockfile during operation.
+Overwrite existing selection with new paths.
 .TP
 .B out, o
-Output stored paths. Supports sorting and auto-clear.
+Output stored selection. Supports sorting and auto-clear.
 .TP
 .B clear, c
-Delete all stored paths and indexes. Requires \fB\-f\fP if locked.
+Removes selection. Requires \fB\-f\fP if locked.
 .TP
 .B unlock, u
 Force remove stale lockfile after confirmation.
@@ -29,8 +29,8 @@ Force remove stale lockfile after confirmation.
 Display full help message.
 .SH OPTIONS
 .TP
-.B \-v
-Verbose mode: Show operation statistics
+.B \-q
+Suppress informational messages.
 .TP
 .B \-s
 Sort output alphabetically (only for \fBout\fP command)
@@ -43,7 +43,7 @@ Force operation ignoring existing lockfile
 .SH EXAMPLES
 Add all config files:
 .nf
-.B $ fargs a /etc/*.conf /usr/local/etc/**/*.cfg
+.B $ fargs s /etc/*.conf /usr/local/etc/**/*.cfg
 .fi
 
 Replace list from find output:

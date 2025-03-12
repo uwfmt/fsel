@@ -64,14 +64,14 @@ fargs unlock
 
 ## Operational Modes
 
-| Command   | Alias | Description                                             |
-|-----------|-------|---------------------------------------------------------|
-| `append`  | `a`   | Add file paths to selection, existing paths are ignored |
-| `replace` | `r`   | Replace existing selection with a new one               |
-| `out`     | `o`   | Output stored into selection file paths                 |
-| `clear`   | `c`   | Clear the selection                                     |
-| `unlock`  | `u`   | Remove stale lockfile                                   |
-| `help`    |       | Show usage information                                  |
+| Command   | Alias | Description                                              |
+|-----------|-------|----------------------------------------------------------|
+| `save`    | `s`   | Save file paths to selection, existing paths are ignored |
+| `replace` | `r`   | Replace existing selection with a new one                |
+| `out`     | `o`   | Output stored into selection file paths                  |
+| `clear`   | `c`   | Clear the selection                                      |
+| `unlock`  | `u`   | Remove stale lockfile                                    |
+| `help`    |       | Show usage information                                   |
 
 Also check man page for using details.
 
@@ -80,7 +80,7 @@ Also check man page for using details.
 | Flag | Description                       |
 |------|-----------------------------------|
 | `-v` | Verbose output (show counts)      |
-| `-s` | Sort output alphabetically        |
+| `-o` | Order output alphabetically       |
 | `-c` | Clear storage after output        |
 | `-f` | Force operation ignoring lockfile |
 | `-h` | Show usage information            |
