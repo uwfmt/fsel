@@ -12,6 +12,7 @@ fargs: fargs.c
 install: fargs
 	install -d $(DESTDIR)$(PREFIX)/bin
 	install -m 0755 fargs $(DESTDIR)$(PREFIX)/bin
+	install -m 0644 fargs.1 $(DESTDIR)$(PREFIX)/share/man/man1
 
 uninstall:
 	rm -f $(DESTDIR)$(PREFIX)/bin/fargs

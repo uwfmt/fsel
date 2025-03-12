@@ -90,7 +90,6 @@ fargs unlock
 - **Lockfiles**: `/tmp/fargs.lock` for operation safety
 - **Security**: 0600 permissions on all user files
 
-## License [![License: BSD](https://img.shields.io/badge/License-BSD-yellow.svg)](https://opensource.org/licenses/BSD)
+## License [![License: GPL](https://img.shields.io/badge/License-GPLv3-green.svg)](https://opensource.org/licenses/gpl-3-0)
 
-
-BSD License - see [LICENSE](LICENSE) for full text.
+Under terms of GPL v3 - see [LICENSE](LICENSE) for full text.
