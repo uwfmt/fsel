@@ -15,7 +15,7 @@
 # Precompiled Headers
 *.gch
 *.pch
-fargs
+fsel
 
 # Libraries
 *.lib

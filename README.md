@@ -1,4 +1,4 @@
-# fargs — a utility for managing file selections in a shell
+# fsel — a utility for managing file selections in a shell
 
 A CLI utility to manage file selections for batch operations in Linux
 environments. Store, retrieve, and manipulate file lists between different
@@ -20,45 +20,53 @@ command runs. It keeps the list persistently until you remove it explicitly.
 - C compiler (gcc/clang)
 
 ```bash
-git clone https://github.com/uwfmt/fargs.git
-cd fargs
+git clone https://github.com/uwfmt/fsel.git
+cd fsel
 make
 sudo make install  # Optional, installs to /usr/local/bin
 ```
 
 ## Usage
 
+**Utility is in development yet. Names of options and commands may be changed in future versions.**
+
 ### Basic Commands
 ```bash
-# Append files
-fargs append *.log /var/log/**/*.tmp
+# Append files from different places into selection
+fsel save ~/*.log
+fsel save /var/lelog/**/*.log
 
-# Add more to the existing list
-ls -1 *.bak | fargs append
-
-# Even more
-fzf -m | fargs append
-
-# Output list
-for f in `fargs out`; do mv $f /var/archive; done
+# Use prepared selection in any shell operation
+for f in `fsel out`; do mv $f /var/archive; done
 
 # Clear storage
-fargs clear  # Force clear
+fsel clear 
 ```
 
 ### Advanced Examples
 ```bash
-# Append with verbose output
-find /home -name '*.conf' | fargs a -v
+# Add paths from current directory, they will be converted to absolute paths
+# You could use "s" as short alias for "save"
+ls -1 *.bak | fsel s
 
-# Output sorted list and clear after using it
-for f in `fargs o -sc`; do cp $f /mnt/backup; done
+# Select even more from interactive TUI utility like `fzf``
+fzf -m | fsel s
 
+# Add resultsf of `find``
+find /home -name '*.conf' | fsel s
+
+# Use sorted selection and clear after using it
+for f in `fsel -oc o`; do cp $f /mnt/backup; done
+```
+
+Forcely overwrite old selections when it needel:
+
+``` bash
 # Force replace locked list
-fargs r -f important_file.*
+fsel r -f important_file.*
 
-# Unlock if previous operation failed
-fargs unlock
+# Unlock when operation failed
+fsel unlock
 > Release existing lock? [Y/N] y
 ```
 
@@ -87,9 +95,9 @@ Also check man page for using details.
 
 ## Technical Details
 
-- **Storage Location**: `/tmp/fargs_<UID>.tmp`
-- **Index Files**: SHA-256 hashes in `/tmp/fargs_<UID>.idx`
-- **Lockfiles**: `/tmp/fargs.lock` for operation safety
+- **Storage Location**: `/tmp/fs_<UID>.tmp`
+- **Index Files**: SHA-256 hashes in `/tmp/fs_<UID>.idx`
+- **Lockfiles**: `/tmp/fs.lock` for operation safety
 - **Security**: 0600 permissions on all user files
 
 ## License [![License: GPL](https://img.shields.io/badge/License-GPLv3-green.svg)](https://opensource.org/licenses/gpl-3-0)

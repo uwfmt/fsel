@@ -28,9 +28,9 @@
 #include <unistd.h>
 
 #define HASH_SIZE SHA256_DIGEST_LENGTH
-#define LOCK_FILE "/tmp/fargs.lock"
-#define TEMP_FILE_TEMPLATE "/tmp/fargs_%d.tmp"
-#define INDEX_FILE_TEMPLATE "/tmp/fargs_%d.idx"
+#define LOCK_FILE "/tmp/fsel.lock"
+#define TEMP_FILE_TEMPLATE "/tmp/fsel_%d.tmp"
+#define INDEX_FILE_TEMPLATE "/tmp/fsel_%d.idx"
 
 char temp_filename[256];
 char index_filename[256];
@@ -285,7 +285,7 @@ int unlock_mode() {
         return 0;
     }
 
-    printf("Other fargs acquired lock. Release existing lock? [Y/N] ");
+    printf("Other instance of \"fsel\" acquired lock. Release existing lock? [Y/N] ");
     char response = getchar();
     if (response == 'Y' || response == 'y') {
         if (unlink(LOCK_FILE) == 0) {
@@ -299,7 +299,7 @@ int unlock_mode() {
 }
 
 void print_help() {
-    printf("Usage: fargs [options] <command> [paths...]\n"
+    printf("Usage: fsel [options] <command> [paths...]\n"
            "Commands:\n"
            "  save, s     Save paths to the selection\n"
            "  replace, r  Replace the selection with new paths\n"
@@ -328,12 +328,12 @@ int main(int argc, char** argv) {
     int opt;
     int force = 0, sort_flag = 0, clear_flag = 0;
 
-    while ((opt = getopt(argc, argv, "qsfch")) != -1) {
+    while ((opt = getopt(argc, argv, "qofch")) != -1) {
         switch (opt) {
             case 'q':
                 quiet = 1;
                 break;
-            case 's':
+            case 'o':
                 sort_flag = 1;
                 break;
             case 'f':

@@ -1,13 +1,13 @@
-.\" Use: groff -man -Tutf8 fargs.1 | less
+.\" Use: groff -man -Tutf8 fsel.1 | less
 .\" Encoding: UTF-8
-.TH FARGS 1 "2025-03-12" "v0.1" "File Paths Selector"
+.TH FSEL 1 "2025-03-12" "v0.1" "File Paths Selector"
 .SH NAME
-fargs \- manage file lists for batch operations
+fsel \- manage file lists for batch operations
 .SH SYNOPSIS
-.B fargs
-[\fICOMMAND\fP] [\fIOPTIONS\fP] [\fIPATHS...\fP]
+.B fsel
+[\fIOPTIONS\fP] [\fICOMMAND\fP] [\fIPATHS...\fP]
 .SH DESCRIPTION
-\fBfargs\fP is a disk-based file list manager for Linux that handles file path storage, deduplication and retrieval. Designed for large-scale file operations with minimal memory usage. Treat it as a selection for a file manager. You pick up files from different places, then pass the selection to other commands for file operations.
+\fBfsel\fP is a disk-based file list manager for Linux that handles file path storage, deduplication and retrieval. Designed for large-scale file operations with minimal memory usage. Treat it as a selection for a file manager. You pick up files from different places, then pass the selection to other commands for file operations.
 .SH COMMANDS
 .TP
 .B save, s
@@ -43,33 +43,33 @@ Force operation ignoring existing lockfile
 .SH EXAMPLES
 Add all config files:
 .nf
-.B $ fargs s /etc/*.conf /usr/local/etc/**/*.cfg
+.B $ fsel s /etc/*.conf /usr/local/etc/**/*.cfg
 .fi
 
 Replace list from find output:
 .nf
-.B $ find . \-name "*.tmp" | fargs r \-v
+.B $ find . \-name "*.tmp" | fsel r \-v
 .fi
 
 Output sorted list to rsync:
 .nf
-.B $ fargs o \-s | xargs \-I{} rsync \-av {} backup:/storage/
+.B $ fsel o \-s | xargs \-I{} rsync \-av {} backup:/storage/
 .fi
 
 Emergency unlock:
 .nf
-.B $ fargs u
-.B Other fargs acquired lock. Release existing lock? [Y/N] y
+.B $ fsel u
+.B Other fsel acquired lock. Release existing lock? [Y/N] y
 .fi
 .SH FILES
 .TP
-.B /tmp/fargs_<UID>.tmp
+.B /tmp/fsel_<UID>.tmp
 Main storage file (user-specific)
 .TP
-.B /tmp/fargs_<UID>.idx
+.B /tmp/fsel_<UID>.idx
 SHA-256 hash index (binary format)
 .TP
-.B /tmp/fargs.lock
+.B /tmp/fsel.lock
 Global operation lockfile
 .SH SECURITY
 All user files created with 0600 permissions. Lockfiles prevent concurrent modifications. SHA-256 hashing ensures path uniqueness.
@@ -91,8 +91,8 @@ Lockfile conflict
 .BR find (1),
 .BR rsync (1)
 .SH BUGS
-Report issues at: \fIhttps://github.com/uwfmt/fargs/issues\fP
+Report issues at: \fIhttps://github.com/uwfmt/fsel/issues\fP
 .SH AUTHOR
 Alexander Grafov <grafov@inet.name>
 .SH LICENSE
-GPLv3 License \- See /usr/share/licenses/fargs/LICENSE
+GPLv3 License \- See /usr/share/licenses/fsel/LICENSE

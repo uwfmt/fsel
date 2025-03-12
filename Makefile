@@ -4,18 +4,19 @@ LDFLAGS =
 LIBS = -lcrypto
 PREFIX ?= /usr/local
 
-all: fargs
+all: fsel
 
-fargs: fargs.c
+fsel: fsel.c
 	$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS) $(LIBS)
 
-install: fargs
+install: fsel
 	install -d $(DESTDIR)$(PREFIX)/bin
-	install -m 0755 fargs $(DESTDIR)$(PREFIX)/bin
-	install -m 0644 fargs.1 $(DESTDIR)$(PREFIX)/share/man/man1
+	install -m 0755 fsel $(DESTDIR)$(PREFIX)/bin
+	install -m 0644 fsel.1 $(DESTDIR)$(PREFIX)/share/man/man1
 
 uninstall:
-	rm -f $(DESTDIR)$(PREFIX)/bin/fargs
+	rm -f $(DESTDIR)$(PREFIX)/bin/fsel
+	rm -f $(DESTDIR)$(PREFIX)/share/man/man1/fsel.1
 
 clean:
-	rm -f fargs
+	rm -f fsel
