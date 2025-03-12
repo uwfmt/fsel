@@ -1,3 +1,17 @@
+/*
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
 #define _GNU_SOURCE
 #include <errno.h>
 #include <fcntl.h>
@@ -13,14 +27,14 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-#define HASH_SIZE SHA256_DIGEST_LENGTH // Updated hash size
+#define HASH_SIZE SHA256_DIGEST_LENGTH
 #define LOCK_FILE "/tmp/fargs.lock"
 #define TEMP_FILE_TEMPLATE "/tmp/fargs_%d.tmp"
 #define INDEX_FILE_TEMPLATE "/tmp/fargs_%d.idx"
 
 char temp_filename[256];
 char index_filename[256];
-int verbose = 0;
+int quiet = 0;
 
 void compute_hash(const char* path, unsigned char* hash) {
     EVP_MD_CTX* ctx = EVP_MD_CTX_new();
@@ -98,7 +112,16 @@ void remove_lock_file() {
     unlink(LOCK_FILE);
 }
 
-int append_mode(int argc, char** argv) {
+int append_mode(int argc, char** argv, int force, int quiet) {
+    if (lock_file_exists() && !force) {
+        fprintf(stderr, "Error: Lock file exists\n");
+        return -1;
+    }
+
+    if (create_lock_file(force) != 0) {
+        return -1;
+    }
+
     FILE* temp_file = fopen(temp_filename, "a");
     if (!temp_file) {
         perror("Failed to open temp file");
@@ -139,7 +162,7 @@ int append_mode(int argc, char** argv) {
     fclose(temp_file);
     fclose(index_file);
 
-    if (verbose) {
+    if (!quiet) {
         struct stat st;
         int total = 0;
         if (stat(index_filename, &st) == 0) {
@@ -148,10 +171,11 @@ int append_mode(int argc, char** argv) {
         printf("%d paths added / %d paths total\n", count, total);
     }
 
+    remove_lock_file();
     return 0;
 }
 
-int replace_mode(int argc, char** argv, int force) {
+int replace_mode(int argc, char** argv, int force, int quiet) {
     if (lock_file_exists() && !force) {
         fprintf(stderr, "Error: Lock file exists\n");
         return -1;
@@ -176,9 +200,9 @@ int replace_mode(int argc, char** argv, int force) {
         return -1;
     }
     fclose(index_file);
-
-    int result = append_mode(argc, argv);
     remove_lock_file();
+
+    int result = append_mode(argc, argv, force, quiet);
     return result;
 }
 
@@ -275,19 +299,20 @@ int unlock_mode() {
 }
 
 void print_help() {
-    printf("Usage: fargs [command] [options] [paths...]\n"
+    printf("Usage: fargs [options] <command> [paths...]\n"
            "Commands:\n"
-           "  append, a   Add paths to the list\n"
-           "  replace, r  Replace the list with new paths\n"
-           "  out, o      Output the list\n"
-           "  clear, c    Clear the list\n"
+           "  append, a   Add paths to the selection\n"
+           "  replace, r  Replace the selection with new paths\n"
+           "  out, o      Output the selection\n"
+           "  clear, c    Clear the selection\n"
            "  unlock, u   Remove the lock file\n"
            "  help        Show this help\n"
            "Options:\n"
-           "  -v          Verbose output\n"
-           "  -s          Sort output\n"
-           "  -c          Clear after output\n"
-           "  -f          Force operation\n");
+           "  -q          Suppress info messages\n"
+           "  -s          Sort files in selection on output\n"
+           "  -c          Clear selection after output\n"
+           "  -f          Force operation (ignore lock)\n"
+           "  -h          Show this help\n");
 }
 
 int main(int argc, char** argv) {
@@ -300,17 +325,13 @@ int main(int argc, char** argv) {
     snprintf(temp_filename, sizeof(temp_filename), TEMP_FILE_TEMPLATE, uid);
     snprintf(index_filename, sizeof(index_filename), INDEX_FILE_TEMPLATE, uid);
 
-    char* command = argv[1];
-    argc -= 2;
-    argv += 2;
-
     int opt;
     int force = 0, sort_flag = 0, clear_flag = 0;
 
-    while ((opt = getopt(argc, argv, "vsfс")) != -1) {
+    while ((opt = getopt(argc, argv, "qsfch")) != -1) {
         switch (opt) {
-            case 'v':
-                verbose = 1;
+            case 'q':
+                quiet = 1;
                 break;
             case 's':
                 sort_flag = 1;
@@ -321,25 +342,35 @@ int main(int argc, char** argv) {
             case 'c':
                 clear_flag = 1;
                 break;
+            case 'h':
+                print_help();
+                return 0;
             default:
                 fprintf(stderr, "Invalid option\n");
                 return 1;
         }
     }
 
+    if (optind >= argc) {
+        fprintf(stderr, "No command specified\n");
+        print_help();
+        return 1;
+    }
+
+    char* command = argv[optind];
+    argc -= optind + 1;
+    argv += optind + 1;
+
     if (strcmp(command, "append") == 0 || strcmp(command, "a") == 0) {
-        return append_mode(argc - optind + 2, argv + optind - 2);
+        return append_mode(argc, argv, force, quiet);
     } else if (strcmp(command, "replace") == 0 || strcmp(command, "r") == 0) {
-        return replace_mode(argc - optind + 2, argv + optind - 2, force);
+        return replace_mode(argc, argv, force, quiet);
     } else if (strcmp(command, "out") == 0 || strcmp(command, "o") == 0) {
         return out_mode(sort_flag, clear_flag, force);
     } else if (strcmp(command, "clear") == 0 || strcmp(command, "c") == 0) {
         return clear_mode(force);
     } else if (strcmp(command, "unlock") == 0 || strcmp(command, "u") == 0) {
         return unlock_mode();
-    } else if (strcmp(command, "help") == 0 || strcmp(command, "-h") == 0) {
-        print_help();
-        return 0;
     } else {
         fprintf(stderr, "Invalid command\n");
         return 1;
