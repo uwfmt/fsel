@@ -79,7 +79,7 @@ Also check man page for using details.
 
 | Flag | Description                       |
 |------|-----------------------------------|
-| `-v` | Verbose output (show counts)      |
+| `-q` | Suppress informational messages   |
 | `-o` | Order output alphabetically       |
 | `-c` | Clear storage after output        |
 | `-f` | Force operation ignoring lockfile |
