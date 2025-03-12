@@ -115,9 +115,9 @@ Also check man page for using details.
 
 ## Technical Details
 
-- **Storage Location**: `/tmp/fs_<UID>.tmp`
-- **Index Files**: SHA-256 hashes in `/tmp/fs_<UID>.idx`
-- **Lockfiles**: `/tmp/fs.lock` for operation safety
+- **Storage Location**: `/tmp/fsel_<UID>.tmp`
+- **Index Files**: SHA-256 hashes in `/tmp/fsel_<UID>.idx`
+- **Lockfiles**: `/tmp/fsel_<UID>.lock` for operation safety
 - **Security**: 0600 permissions on all user files
 
 ## License [![License: GPL](https://img.shields.io/badge/License-GPLv3-green.svg)](https://opensource.org/licenses/gpl-3-0)

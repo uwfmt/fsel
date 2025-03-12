@@ -28,7 +28,7 @@
 #include <unistd.h>
 
 #define HASH_SIZE SHA256_DIGEST_LENGTH
-#define LOCK_FILE "/tmp/fsel.lock"
+#define LOCK_FILE_TEMPLATE "/tmp/fsel_%d.lock"
 #define TEMP_FILE_TEMPLATE "/tmp/fsel_%d.tmp"
 #define INDEX_FILE_TEMPLATE "/tmp/fsel_%d.idx"
 
@@ -38,6 +38,7 @@
 #define SORT_FLAG 0x04
 #define CLEAR_FLAG 0x08
 
+char lock_filename[256];
 char temp_filename[256];
 char index_filename[256];
 
@@ -90,17 +91,17 @@ int process_path(const char* path, FILE* temp_file, FILE* index_file) {
 }
 
 int lock_file_exists() {
-    return access(LOCK_FILE, F_OK) == 0;
+    return access(lock_filename, F_OK) == 0;
 }
 
 int create_lock_file(int force) {
     if (force && lock_file_exists()) {
-        if (unlink(LOCK_FILE) == -1) {
+        if (unlink(lock_filename) == -1) {
             perror("Failed to remove lock file");
             return -1;
         }
     }
-    int fd = open(LOCK_FILE, O_WRONLY | O_CREAT | O_EXCL, 0600);
+    int fd = open(lock_filename, O_WRONLY | O_CREAT | O_EXCL, 0600);
     if (fd == -1) {
         if (errno == EEXIST) {
             fprintf(stderr, "Error: Lock file exists\n");
@@ -114,7 +115,7 @@ int create_lock_file(int force) {
 }
 
 void remove_lock_file() {
-    unlink(LOCK_FILE);
+    unlink(lock_filename);
 }
 
 char* safe_strdup(const char* str) {
@@ -219,7 +220,7 @@ int replace_mode(int argc, char** argv, int flags) {
     return append_mode(argc, argv, flags);
 }
 
-int out_mode(int _, char** __, int flags) {
+int output_mode(int _, char** __, int flags) {
     (void)_;
     (void)__;
 
@@ -232,6 +233,9 @@ int out_mode(int _, char** __, int flags) {
         return -1;
     }
 
+    if (access(temp_filename, F_OK) == -1) {
+        return 0;
+    }
     FILE* temp_file = fopen(temp_filename, "r");
     if (!temp_file) {
         perror("Failed to open temp file");
@@ -307,7 +311,7 @@ int unlock_mode() {
     printf("Other instance of \"fsel\" acquired lock. Release existing lock? [Y/N] ");
     char response = getchar();
     if (response == 'Y' || response == 'y') {
-        if (unlink(LOCK_FILE) == 0) {
+        if (unlink(lock_filename) == 0) {
             printf("Lock file removed\n");
         } else {
             perror("Failed to remove lock file");
@@ -340,9 +344,9 @@ typedef struct {
     int (*func)(int, char**, int);
 } Command;
 
-Command commands[] = {{"save", append_mode}, {"s", append_mode}, {"replace", replace_mode},
-                      {"r", replace_mode},   {"out", out_mode},  {"o", out_mode},
-                      {"clear", clear_mode}, {"c", clear_mode},  {"unlock", unlock_mode},
+Command commands[] = {{"save", append_mode}, {"s", append_mode},   {"replace", replace_mode},
+                      {"r", replace_mode},   {"out", output_mode}, {"o", output_mode},
+                      {"clear", clear_mode}, {"c", clear_mode},    {"unlock", unlock_mode},
                       {"u", unlock_mode},    {NULL, NULL}};
 
 Command* find_command(const char* name) {
@@ -363,6 +367,7 @@ int main(int argc, char** argv) {
     int uid = getuid();
     snprintf(temp_filename, sizeof(temp_filename), TEMP_FILE_TEMPLATE, uid);
     snprintf(index_filename, sizeof(index_filename), INDEX_FILE_TEMPLATE, uid);
+    snprintf(lock_filename, sizeof(index_filename), LOCK_FILE_TEMPLATE, uid);
 
     int opt;
     int flags = 0;
