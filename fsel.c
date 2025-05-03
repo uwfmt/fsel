@@ -26,7 +26,6 @@
 #include <sys/file.h>
 #include <sys/stat.h>
 #include <unistd.h>
-
 #define HASH_SIZE SHA256_DIGEST_LENGTH
 #define LOCK_FILE_TEMPLATE "/tmp/fsel_%d.lock"
 #define TEMP_FILE_TEMPLATE "/tmp/fsel_%d.tmp"
@@ -45,7 +44,6 @@ char index_filename[256];
 void compute_hash(const char* path, unsigned char* hash) {
     EVP_MD_CTX* ctx = EVP_MD_CTX_new();
     const EVP_MD* md = EVP_sha256();
-
     EVP_DigestInit_ex(ctx, md, NULL);
     EVP_DigestUpdate(ctx, path, strlen(path));
     EVP_DigestFinal_ex(ctx, hash, NULL);
@@ -69,21 +67,17 @@ int process_path(const char* path, FILE* temp_file, FILE* index_file) {
         fprintf(stderr, "Path does not exist: %s\n", path);
         return 0;
     }
-
     char* abs_path = realpath(path, NULL);
     if (!abs_path) {
         fprintf(stderr, "Invalid path: %s\n", path);
         return 0;
     }
-
     unsigned char hash[HASH_SIZE];
     compute_hash(abs_path, hash);
-
     if (hash_exists(index_file, hash)) {
         free(abs_path);
         return 0;
     }
-
     fprintf(temp_file, "%s\n", abs_path);
     fwrite(hash, HASH_SIZE, 1, index_file);
     free(abs_path);
@@ -127,31 +121,26 @@ char* safe_strdup(const char* str) {
     return new_str;
 }
 
-int append_mode(int argc, char** argv, int flags) {
+int add_mode(int argc, char** argv, int flags) {
     if (lock_file_exists() && !(flags & FORCE_FLAG)) {
         fprintf(stderr, "Error: Lock file exists\n");
         return -1;
     }
-
     if (create_lock_file(flags & FORCE_FLAG) != 0) {
         return -1;
     }
-
     FILE* temp_file = fopen(temp_filename, "a");
     if (!temp_file) {
         perror("Failed to open temp file");
         return -1;
     }
-
     FILE* index_file = fopen(index_filename, "a+");
     if (!index_file) {
         perror("Failed to open index file");
         fclose(temp_file);
         return -1;
     }
-
     int count = 0;
-
     // 1. Обработка аргументов командной строки
     for (int i = 0; i < argc; i++) {
         glob_t glob_result;
@@ -162,7 +151,6 @@ int append_mode(int argc, char** argv, int flags) {
             globfree(&glob_result);
         }
     }
-
     // 2. Чтение из stdin ТОЛЬКО если он не пустой
     if (!isatty(fileno(stdin))) {
         char* line = NULL;
@@ -173,10 +161,8 @@ int append_mode(int argc, char** argv, int flags) {
         }
         free(line);
     }
-
     fclose(temp_file);
     fclose(index_file);
-
     if (!(flags & QUIET_FLAG)) {
         struct stat st;
         int total = 0;
@@ -185,7 +171,6 @@ int append_mode(int argc, char** argv, int flags) {
         }
         printf("%d paths added / %d paths total\n", count, total);
     }
-
     remove_lock_file();
     return 0;
 }
@@ -195,11 +180,9 @@ int replace_mode(int argc, char** argv, int flags) {
         fprintf(stderr, "Error: Lock file exists\n");
         return -1;
     }
-
     if (create_lock_file(flags & FORCE_FLAG) != 0) {
         return -1;
     }
-
     FILE* temp_file = fopen(temp_filename, "w");
     if (!temp_file) {
         perror("Failed to create temp file");
@@ -207,7 +190,6 @@ int replace_mode(int argc, char** argv, int flags) {
         return -1;
     }
     fclose(temp_file);
-
     FILE* index_file = fopen(index_filename, "wb");
     if (!index_file) {
         perror("Failed to create index file");
@@ -216,23 +198,19 @@ int replace_mode(int argc, char** argv, int flags) {
     }
     fclose(index_file);
     remove_lock_file();
-
-    return append_mode(argc, argv, flags);
+    return add_mode(argc, argv, flags);
 }
 
-int output_mode(int _, char** __, int flags) {
+int list_mode(int _, char** __, int flags) {
     (void)_;
     (void)__;
-
     if (lock_file_exists() && !(flags & FORCE_FLAG)) {
         fprintf(stderr, "Error: Lock file exists\n");
         return -1;
     }
-
     if (flags & CLEAR_FLAG && create_lock_file(flags & FORCE_FLAG) != 0) {
         return -1;
     }
-
     if (access(temp_filename, F_OK) == -1) {
         return 0;
     }
@@ -243,23 +221,18 @@ int output_mode(int _, char** __, int flags) {
             remove_lock_file();
         return -1;
     }
-
     char* line = NULL;
     size_t len = 0;
     ssize_t read;
-
     if (flags & SORT_FLAG) {
         char** lines = NULL;
         size_t count = 0;
-
         while ((read = getline(&line, &len, temp_file)) != -1) {
             lines = realloc(lines, (count + 1) * sizeof(char*));
             lines[count] = safe_strdup(line);
             count++;
         }
-
         qsort(lines, count, sizeof(char*), (int (*)(const void*, const void*))strcmp);
-
         for (size_t i = 0; i < count; i++) {
             printf("%s", lines[i]);
             free(lines[i]);
@@ -270,32 +243,26 @@ int output_mode(int _, char** __, int flags) {
             printf("%s", line);
         }
     }
-
     free(line);
     fclose(temp_file);
-
     if (flags & CLEAR_FLAG) {
         unlink(temp_filename);
         unlink(index_filename);
         remove_lock_file();
     }
-
     return 0;
 }
 
 int clear_mode(int _, char** __, int flags) {
     (void)_;
     (void)__;
-
     if (lock_file_exists() && !(flags & FORCE_FLAG)) {
         fprintf(stderr, "Error: Lock file exists\n");
         return -1;
     }
-
     if (create_lock_file(flags & FORCE_FLAG) != 0) {
         return -1;
     }
-
     unlink(temp_filename);
     unlink(index_filename);
     remove_lock_file();
@@ -307,7 +274,6 @@ int unlock_mode() {
         printf("No lock file found\n");
         return 0;
     }
-
     printf("Other instance of \"fsel\" acquired lock. Release existing lock? [Y/N] ");
     char response = getchar();
     if (response == 'Y' || response == 'y') {
@@ -321,21 +287,65 @@ int unlock_mode() {
     return 0;
 }
 
-void print_help() {
+int validate_mode(int _, char** __, int flags) {
+    (void)_;
+    (void)__;
+    if (lock_file_exists() && !(flags & FORCE_FLAG)) {
+        fprintf(stderr, "Error: Lock file exists\n");
+        return -1;
+    }
+    if (access(temp_filename, F_OK) == -1) {
+        return 0;
+    }
+    FILE* temp_file = fopen(temp_filename, "r");
+    if (!temp_file) {
+        perror("Failed to open temp file");
+        return -1;
+    }
+    char* line = NULL;
+    size_t len = 0;
+    ssize_t read;
+    int valid_count = 0;
+    int invalid_count = 0;
+
+    while ((read = getline(&line, &len, temp_file)) != -1) {
+        line[strcspn(line, "\n")] = '\0';
+        struct stat st;
+        if (stat(line, &st) == 0) {
+            printf("✓ %s\n", line);
+            valid_count++;
+        } else {
+            printf("✗ %s\n", line);
+            invalid_count++;
+        }
+    }
+    free(line);
+    fclose(temp_file);
+
+    if (!(flags & QUIET_FLAG)) {
+        printf("Total: %d valid, %d invalid\n", valid_count, invalid_count);
+    }
+
+    return (invalid_count > 0) ? 1 : 0;
+}
+
+int print_help() {
     printf("Usage: fsel [options] <command> [paths...]\n"
            "Commands:\n"
-           "  save, s     Save paths to the selection\n"
+           "  add, a      Add paths to the selection\n"
            "  replace, r  Replace the selection with new paths\n"
-           "  out, o      Output the selection\n"
+           "  list, l     List the selection\n"
            "  clear, c    Clear the selection\n"
            "  unlock, u   Remove the lock file\n"
-           "  help        Show this help\n"
+           "  validate, v Validate the selection\n"
+           "  help, h     Show this help\n"
            "Options:\n"
            "  -q          Suppress info messages\n"
            "  -s          Sort files in selection on output\n"
            "  -c          Clear selection after output\n"
            "  -f          Force operation (ignore lock)\n"
            "  -h          Show this help\n");
+    return 0;
 }
 
 // For simple mode handling all modes use the same signature
@@ -344,10 +354,21 @@ typedef struct {
     int (*func)(int, char**, int);
 } Command;
 
-Command commands[] = {{"save", append_mode}, {"s", append_mode},   {"replace", replace_mode},
-                      {"r", replace_mode},   {"out", output_mode}, {"o", output_mode},
-                      {"clear", clear_mode}, {"c", clear_mode},    {"unlock", unlock_mode},
-                      {"u", unlock_mode},    {NULL, NULL}};
+Command commands[] = {{"add", add_mode},
+                      {"a", add_mode},
+                      {"replace", replace_mode},
+                      {"r", replace_mode},
+                      {"list", list_mode},
+                      {"l", list_mode},
+                      {"clear", clear_mode},
+                      {"c", clear_mode},
+                      {"unlock", unlock_mode},
+                      {"u", unlock_mode},
+                      {"validate", validate_mode},
+                      {"v", validate_mode},
+                      {"help", print_help},
+                      {"h", print_help},
+                      {NULL, NULL}};
 
 Command* find_command(const char* name) {
     for (int i = 0; commands[i].name; i++) {
@@ -371,24 +392,22 @@ int main(int argc, char** argv) {
 
     int opt;
     int flags = 0;
-
-    while ((opt = getopt(argc, argv, "qofch")) != -1) {
+    while ((opt = getopt(argc, argv, "qscfh")) != -1) {
         switch (opt) {
             case 'q':
                 flags |= QUIET_FLAG;
                 break;
-            case 'o':
+            case 's':
                 flags |= SORT_FLAG;
-                break;
-            case 'f':
-                flags |= FORCE_FLAG;
                 break;
             case 'c':
                 flags |= CLEAR_FLAG;
                 break;
+            case 'f':
+                flags |= FORCE_FLAG;
+                break;
             case 'h':
-                print_help();
-                return 0;
+                return print_help();
             default:
                 fprintf(stderr, "Invalid option\n");
                 return EXIT_FAILURE;

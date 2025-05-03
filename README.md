@@ -20,8 +20,7 @@ file manager (like `Midnight Commander`, `Ranger` and so on).
 With `fsel` and powerful search utilities with filtering, such as `fzf`, you
 can easily compile the necessary list of files, iterating as needed and moving
 through the file tree. Finally, you can use this list in a shell script or a
-specific command (for example, in a loop: `for f in $(fsel o); do cp -a "$f";
-done`).
+specific command (for example, in a loop: `for f in $(fsel list); do cp -a "$f"; done`).
 
 ## Features
 
@@ -31,6 +30,7 @@ done`).
 - Implement lockfile mechanism to prevent concurrency collisions
 - Suited for really large selections (keep data on disk + uses index-based
   deduplication).
+- `validate` (`v`) — Validate the selection by checking if all stored file paths exist.
 
 ## Installation
 
@@ -53,37 +53,34 @@ sudo make install  # Optional, installs to /usr/local/bin
 ### Basic Commands
 ```bash
 # Append files from different places into selection
-fsel save ~/*.log
-fsel save /var/lelog/**/*.log
+fsel add ~/*.log
+fsel add /var/lelog/**/*.log
 
 # Use prepared selection in any shell operation
-for f in `fsel out`; do mv $f /var/archive; done
-
-# Clear storage
-fsel clear 
+for f in `fsel list`; do mv $f /var/archive; done
 ```
 
 ### Advanced Examples
 ```bash
 # Add paths from current directory, they will be converted to absolute paths
-# You could use "s" as short alias for "save"
-ls -1 *.bak | fsel s
+# You could use "a" as short alias for "add"
+ls -1 *.bak | fsel a
 
-# Select even more from interactive TUI utility like `fzf``
-fzf -m | fsel s
+# Select even more from interactive TUI utility like `fzf`
+fzf -m | fsel a
 
-# Add resultsf of `find``
-find /home -name '*.conf' | fsel s
+# Add results of `find`
+find /home -name '*.conf' | fsel a
 
 # Use sorted selection and clear after using it
-for f in `fsel -oc o`; do cp $f /mnt/backup; done
+for f in `fsel -oc l`; do cp $f /mnt/backup; done
 ```
 
-Forcely overwrite old selections when it needel:
+Forcely overwrite old selections when it needed:
 
 ``` bash
 # Force replace locked list
-fsel r -f important_file.*
+fsel replace important_file.*
 
 # Unlock when operation failed
 fsel unlock
@@ -92,14 +89,14 @@ fsel unlock
 
 ## Operational Modes
 
-| Command   | Alias | Description                                              |
-|-----------|-------|----------------------------------------------------------|
-| `save`    | `s`   | Save file paths to selection, existing paths are ignored |
-| `replace` | `r`   | Replace existing selection with a new one                |
-| `out`     | `o`   | Output stored into selection file paths                  |
-| `clear`   | `c`   | Clear the selection                                      |
-| `unlock`  | `u`   | Remove stale lockfile                                    |
-| `help`    |       | Show usage information                                   |
+| Command     | Alias | Description                                              |
+|-------------|-------|----------------------------------------------------------|
+| `add`       | `a`   | Save file paths to selection, existing paths are ignored |
+| `replace`   | `r`   | Replace existing selection with a new one                |
+| `list`      | `l`   | Output stored into selection file paths                  |
+| `clear`     | `c`   | Clear the selection                                      |
+| `unlock`    | `u`   | Remove stale lockfile                                    |
+| `validate`  | `v`   | Validate the selection                                   |
 
 Also check man page for using details.
 
@@ -108,10 +105,11 @@ Also check man page for using details.
 | Flag | Description                       |
 |------|-----------------------------------|
 | `-q` | Suppress informational messages   |
-| `-o` | Order output alphabetically       |
+| `-s` | Sort files in selection on output |
 | `-c` | Clear storage after output        |
 | `-f` | Force operation ignoring lockfile |
 | `-h` | Show usage information            |
+| `-v` | Validate the selection            |
 
 ## Technical Details
 
