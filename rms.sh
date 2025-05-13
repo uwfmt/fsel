@@ -1,5 +1,5 @@
 #!/bin/sh
 # Like a "rm" command, but for selected by "fargs" files.
 # Dangerous! By default uses option for recursive removal.
-for f in $(fsel o); do rm -rf $f $argv; done
+for f in $(fsel l); do rm -rf $f $argv; done
 fsel c
