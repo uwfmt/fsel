@@ -380,11 +380,6 @@ Command* find_command(const char* name) {
 }
 
 int main(int argc, char** argv) {
-    if (argc < 2) {
-        print_help();
-        return EXIT_FAILURE;
-    }
-
     int uid = getuid();
     snprintf(temp_filename, sizeof(temp_filename), TEMP_FILE_TEMPLATE, uid);
     snprintf(index_filename, sizeof(index_filename), INDEX_FILE_TEMPLATE, uid);
@@ -415,9 +410,8 @@ int main(int argc, char** argv) {
     }
 
     if (optind >= argc) {
-        fprintf(stderr, "No command specified\n");
-        print_help();
-        return EXIT_FAILURE;
+        // When no command is specified, default to list mode
+        return list_mode(0, NULL, flags);
     }
 
     char* command = argv[optind];
