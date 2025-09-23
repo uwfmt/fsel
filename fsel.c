@@ -422,8 +422,8 @@ int main(int argc, char** argv) {
     if (cmd) {
         return cmd->func(argc, argv, flags);
     } else {
-        fprintf(stderr, "Invalid command\n");
-        return EXIT_FAILURE;
+        // If command is not found, treat all arguments as paths for add mode
+        return add_mode(argc + 1, argv - 1, flags);
     }
 
     return EXIT_SUCCESS;
