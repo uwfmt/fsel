@@ -132,7 +132,7 @@ int add_mode(int argc, char** argv, int flags) {
     if (create_lock_file(flags & FORCE_FLAG) != 0) {
         return -1;
     }
-    
+
     // Handle replace flag
     if (flags & REPLACE_FLAG) {
         FILE* temp_file = fopen(temp_filename, "w");
@@ -150,7 +150,7 @@ int add_mode(int argc, char** argv, int flags) {
         }
         fclose(index_file);
     }
-    
+
     FILE* temp_file = fopen(temp_filename, "a");
     if (!temp_file) {
         perror("Failed to open temp file");
@@ -265,13 +265,18 @@ int clear_mode(int _, char** __, int flags) {
     return 0;
 }
 
-int unlock_mode() {
+int unlock_mode(int _, char** __, int flags) {
+    (void)_;
+    (void)__;
     if (!lock_file_exists()) {
         printf("No lock file found\n");
         return 0;
     }
-    printf("Other instance of \"fsel\" acquired lock. Release existing lock? [Y/N] ");
-    char response = getchar();
+    char response = 'Y';
+    if (!(flags & FORCE_FLAG)) {
+        printf("Other instance of \"fsel\" acquired lock. Release existing lock? [Y/N] ");
+        response = getchar();
+    }
     if (response == 'Y' || response == 'y') {
         if (unlink(lock_filename) == 0) {
             printf("Lock file removed\n");
@@ -383,13 +388,13 @@ int main(int argc, char** argv) {
 
     // Handle standalone flags
     if (flags & UNLOCK_FLAG) {
-        return unlock_mode();
+        return unlock_mode(0, NULL, flags);
     }
-    
+
     if (flags & VALIDATE_FLAG) {
         return validate_mode(0, NULL, flags);
     }
-    
+
     if (flags & CLEAR_FLAG && optind >= argc) {
         return clear_mode(0, NULL, flags);
     }
