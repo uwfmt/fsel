@@ -27,9 +27,6 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #define HASH_SIZE SHA256_DIGEST_LENGTH
-#define LOCK_FILE_TEMPLATE "/tmp/fsel_%d.lock"
-#define TEMP_FILE_TEMPLATE "/tmp/fsel_%d.tmp"
-#define INDEX_FILE_TEMPLATE "/tmp/fsel_%d.idx"
 
 // Command line flags
 #define FORCE_FLAG 0x01
@@ -348,10 +345,15 @@ int print_help() {
 }
 
 int main(int argc, char** argv) {
+    const char* tmpdir = getenv("TMPDIR");
+    if (tmpdir == NULL) {
+        tmpdir = "/tmp";
+    }
+
     int uid = getuid();
-    snprintf(temp_filename, sizeof(temp_filename), TEMP_FILE_TEMPLATE, uid);
-    snprintf(index_filename, sizeof(index_filename), INDEX_FILE_TEMPLATE, uid);
-    snprintf(lock_filename, sizeof(index_filename), LOCK_FILE_TEMPLATE, uid);
+    snprintf(temp_filename, sizeof(temp_filename), "%s/fsel_%d.tmp", tmpdir, uid);
+    snprintf(index_filename, sizeof(index_filename), "%s/fsel_%d.idx", tmpdir, uid);
+    snprintf(lock_filename, sizeof(index_filename), "%s/fsel_%d.lock", tmpdir, uid);
 
     int opt;
     int flags = 0;
