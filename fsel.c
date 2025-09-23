@@ -36,6 +36,9 @@
 #define QUIET_FLAG 0x02
 #define SORT_FLAG 0x04
 #define CLEAR_FLAG 0x08
+#define REPLACE_FLAG 0x10
+#define UNLOCK_FLAG 0x20
+#define VALIDATE_FLAG 0x40
 
 char lock_filename[256];
 char temp_filename[256];
@@ -129,6 +132,25 @@ int add_mode(int argc, char** argv, int flags) {
     if (create_lock_file(flags & FORCE_FLAG) != 0) {
         return -1;
     }
+    
+    // Handle replace flag
+    if (flags & REPLACE_FLAG) {
+        FILE* temp_file = fopen(temp_filename, "w");
+        if (!temp_file) {
+            perror("Failed to create temp file");
+            remove_lock_file();
+            return -1;
+        }
+        fclose(temp_file);
+        FILE* index_file = fopen(index_filename, "wb");
+        if (!index_file) {
+            perror("Failed to create index file");
+            remove_lock_file();
+            return -1;
+        }
+        fclose(index_file);
+    }
+    
     FILE* temp_file = fopen(temp_filename, "a");
     if (!temp_file) {
         perror("Failed to open temp file");
@@ -173,32 +195,6 @@ int add_mode(int argc, char** argv, int flags) {
     }
     remove_lock_file();
     return 0;
-}
-
-int replace_mode(int argc, char** argv, int flags) {
-    if (lock_file_exists() && !(flags & FORCE_FLAG)) {
-        fprintf(stderr, "Error: Lock file exists\n");
-        return -1;
-    }
-    if (create_lock_file(flags & FORCE_FLAG) != 0) {
-        return -1;
-    }
-    FILE* temp_file = fopen(temp_filename, "w");
-    if (!temp_file) {
-        perror("Failed to create temp file");
-        remove_lock_file();
-        return -1;
-    }
-    fclose(temp_file);
-    FILE* index_file = fopen(index_filename, "wb");
-    if (!index_file) {
-        perror("Failed to create index file");
-        remove_lock_file();
-        return -1;
-    }
-    fclose(index_file);
-    remove_lock_file();
-    return add_mode(argc, argv, flags);
 }
 
 int list_mode(int _, char** __, int flags) {
@@ -330,53 +326,20 @@ int validate_mode(int _, char** __, int flags) {
 }
 
 int print_help() {
-    printf("Usage: fsel [options] <command> [paths...]\n"
-           "Commands:\n"
-           "  add, a      Add paths to the selection\n"
-           "  replace, r  Replace the selection with new paths\n"
-           "  list, l     List the selection\n"
-           "  clear, c    Clear the selection\n"
-           "  unlock, u   Remove the lock file\n"
-           "  validate, v Validate the selection\n"
-           "  help, h     Show this help\n"
+    printf("Usage: fsel [options] [paths...]\n"
            "Options:\n"
            "  -q          Suppress info messages\n"
            "  -s          Sort files in selection on output\n"
-           "  -c          Clear selection after output\n"
+           "  -c          Clear selection after output / Clear selection\n"
            "  -f          Force operation (ignore lock)\n"
-           "  -h          Show this help\n");
+           "  -r          Replace the selection with new paths\n"
+           "  -u          Remove the lock file\n"
+           "  -v          Validate the selection\n"
+           "  -h          Show this help\n"
+           "\n"
+           "When no paths are provided, list mode is used by default.\n"
+           "When paths are provided without -r, they are added to the selection.\n");
     return 0;
-}
-
-// For simple mode handling all modes use the same signature
-typedef struct {
-    const char* name;
-    int (*func)(int, char**, int);
-} Command;
-
-Command commands[] = {{"add", add_mode},
-                      {"a", add_mode},
-                      {"replace", replace_mode},
-                      {"r", replace_mode},
-                      {"list", list_mode},
-                      {"l", list_mode},
-                      {"clear", clear_mode},
-                      {"c", clear_mode},
-                      {"unlock", unlock_mode},
-                      {"u", unlock_mode},
-                      {"validate", validate_mode},
-                      {"v", validate_mode},
-                      {"help", print_help},
-                      {"h", print_help},
-                      {NULL, NULL}};
-
-Command* find_command(const char* name) {
-    for (int i = 0; commands[i].name; i++) {
-        if (strcmp(commands[i].name, name) == 0) {
-            return &commands[i];
-        }
-    }
-    return NULL;
 }
 
 int main(int argc, char** argv) {
@@ -387,7 +350,7 @@ int main(int argc, char** argv) {
 
     int opt;
     int flags = 0;
-    while ((opt = getopt(argc, argv, "qscfh")) != -1) {
+    while ((opt = getopt(argc, argv, "qscfruvh")) != -1) {
         switch (opt) {
             case 'q':
                 flags |= QUIET_FLAG;
@@ -401,6 +364,15 @@ int main(int argc, char** argv) {
             case 'f':
                 flags |= FORCE_FLAG;
                 break;
+            case 'r':
+                flags |= REPLACE_FLAG;
+                break;
+            case 'u':
+                flags |= UNLOCK_FLAG;
+                break;
+            case 'v':
+                flags |= VALIDATE_FLAG;
+                break;
             case 'h':
                 return print_help();
             default:
@@ -409,22 +381,26 @@ int main(int argc, char** argv) {
         }
     }
 
+    // Handle standalone flags
+    if (flags & UNLOCK_FLAG) {
+        return unlock_mode();
+    }
+    
+    if (flags & VALIDATE_FLAG) {
+        return validate_mode(0, NULL, flags);
+    }
+    
+    if (flags & CLEAR_FLAG && optind >= argc) {
+        return clear_mode(0, NULL, flags);
+    }
+
     if (optind >= argc) {
-        // When no command is specified, default to list mode
+        // When no paths are provided, default to list mode
         return list_mode(0, NULL, flags);
     }
 
-    char* command = argv[optind];
-    argc -= optind + 1;
-    argv += optind + 1;
-
-    Command* cmd = find_command(command);
-    if (cmd) {
-        return cmd->func(argc, argv, flags);
-    } else {
-        // If command is not found, treat all arguments as paths for add mode
-        return add_mode(argc + 1, argv - 1, flags);
-    }
+    // When paths are provided, use add mode
+    return add_mode(argc - optind, argv + optind, flags);
 
     return EXIT_SUCCESS;
 }

@@ -5,60 +5,58 @@
 fsel \- manage file lists for batch operations
 .SH SYNOPSIS
 .B fsel
-[\fIOPTIONS\fP] [\fICOMMAND\fP] [\fIPATHS...\fP]
+[\fIOPTIONS\fP] [\fIPATHS...\fP]
 .SH DESCRIPTION
 \fBfsel\fP is a disk-based file list manager for Linux that handles file path storage, deduplication and retrieval. Designed for large-scale file operations with minimal memory usage. Treat it as a selection for a file manager. You pick up files from different places, then pass the selection to other commands for file operations.
-.SH COMMANDS
-.TP
-.B save, s
-Save files/directories to selection. Accepts glob patterns and stdin.
-.TP
-.B replace, r
-Overwrite existing selection with new paths.
-.TP
-.B out, o
-Output stored selection. Supports sorting and auto-clear.
-.TP
-.B clear, c
-Removes selection. Requires \fB\-f\fP if locked.
-.TP
-.B unlock, u
-Force remove stale lockfile after confirmation.
-.TP
-.B help
-Display full help message.
 .SH OPTIONS
 .TP
 .B \-q
 Suppress informational messages.
 .TP
 .B \-s
-Sort output alphabetically (only for \fBout\fP command)
+Sort output alphabetically
 .TP
 .B \-c
-Clear storage after output (only for \fBout\fP command)
+Clear storage after output or clear selection when used without paths
 .TP
 .B \-f
 Force operation ignoring existing lockfile
+.TP
+.B \-r
+Replace existing selection with new paths
+.TP
+.B \-u
+Force remove stale lockfile after confirmation
+.TP
+.B \-v
+Validate the selection
+.TP
+.B \-h
+Display this help message
 .SH EXAMPLES
 Add all config files:
 .nf
-.B $ fsel s /etc/*.conf /usr/local/etc/**/*.cfg
+.B $ fsel /etc/*.conf /usr/local/etc/**/*.cfg
 .fi
 
 Replace list from find output:
 .nf
-.B $ find . \-name "*.tmp" | fsel r \-v
+.B $ find . \-name "*.tmp" | fsel \-r \-v
 .fi
 
 Output sorted list to rsync:
 .nf
-.B $ fsel o \-s | xargs \-I{} rsync \-av {} backup:/storage/
+.B $ fsel \-s | xargs \-I{} rsync \-av {} backup:/storage/
+.fi
+
+Clear selection:
+.nf
+.B $ fsel \-c
 .fi
 
 Emergency unlock:
 .nf
-.B $ fsel u
+.B $ fsel \-u
 .B Other fsel acquired lock. Release existing lock? [Y/N] y
 .fi
 .SH FILES
@@ -69,8 +67,8 @@ Main storage file (user-specific)
 .B /tmp/fsel_<UID>.idx
 SHA-256 hash index (binary format)
 .TP
-.B /tmp/fsel.lock
-Global operation lockfile
+.B /tmp/fsel_<UID>.lock
+User-specific operation lockfile
 .SH SECURITY
 All user files created with 0600 permissions. Lockfiles prevent concurrent modifications. SHA-256 hashing ensures path uniqueness.
 .SH EXIT STATUS

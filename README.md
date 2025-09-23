@@ -20,7 +20,7 @@ file manager (like `Midnight Commander`, `Ranger` and so on).
 With `fsel` and powerful search utilities with filtering, such as `fzf`, you
 can easily compile the necessary list of files, iterating as needed and moving
 through the file tree. Finally, you can use this list in a shell script or a
-specific command (for example, in a loop: `for f in $(fsel list); do cp -a "$f"; done`).
+specific command (for example, in a loop: `for f in $(fsel); do cp -a "$f"; done`).
 
 ## Features
 
@@ -30,7 +30,7 @@ specific command (for example, in a loop: `for f in $(fsel list); do cp -a "$f";
 - Implement lockfile mechanism to prevent concurrency collisions
 - Suited for really large selections (keep data on disk + uses index-based
   deduplication).
-- `validate` (`v`) — Validate the selection by checking if all stored file paths exist.
+- `validate` (`-v`) — Validate the selection by checking if all stored file paths exist.
 
 ## Installation
 
@@ -53,50 +53,49 @@ sudo make install  # Optional, installs to /usr/local/bin
 ### Basic Commands
 ```bash
 # Append files from different places into selection
-fsel add ~/*.log
-fsel add /var/lelog/**/*.log
+fsel ~/*.log
+fsel /var/lelog/**/*.log
 
 # Use prepared selection in any shell operation
-for f in `fsel list`; do mv $f /var/archive; done
+for f in `fsel`; do mv $f /var/archive; done
 ```
 
 ### Advanced Examples
 ```bash
 # Add paths from current directory, they will be converted to absolute paths
-# You could use "a" as short alias for "add"
-ls -1 *.bak | fsel a
+ls -1 *.bak | fsel
 
 # Select even more from interactive TUI utility like `fzf`
-fzf -m | fsel a
+fzf -m | fsel
 
 # Add results of `find`
-find /home -name '*.conf' | fsel a
+find /home -name '*.conf' | fsel
 
 # Use sorted selection and clear after using it
-for f in `fsel -oc l`; do cp $f /mnt/backup; done
+for f in `fsel -sc`; do cp $f /mnt/backup; done
 ```
 
 Forcely overwrite old selections when it needed:
 
 ``` bash
 # Force replace locked list
-fsel replace important_file.*
+fsel -fr important_file.*
 
 # Unlock when operation failed
-fsel unlock
+fsel -u
 > Release existing lock? [Y/N] y
 ```
 
 ## Operational Modes
 
-| Command     | Alias | Description                                              |
-|-------------|-------|----------------------------------------------------------|
-| `add`       | `a`   | Save file paths to selection, existing paths are ignored |
-| `replace`   | `r`   | Replace existing selection with a new one                |
-| `list`      | `l`   | Output stored into selection file paths                  |
-| `clear`     | `c`   | Clear the selection                                      |
-| `unlock`    | `u`   | Remove stale lockfile                                    |
-| `validate`  | `v`   | Validate the selection                                   |
+| Mode        | Flag | Description                                              |
+|-------------|------|----------------------------------------------------------|
+| `add`       |      | Save file paths to selection, existing paths are ignored  |
+| `replace`   | `-r` | Replace existing selection with new one                  |
+| `list`      |      | Output stored into selection file paths (default)        |
+| `clear`     | `-c` | Clear the selection                                      |
+| `unlock`    | `-u` | Remove stale lockfile                                    |
+| `validate`  | `-v` | Validate the selection                                   |
 
 Also check man page for using details.
 
