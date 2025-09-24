@@ -25,6 +25,7 @@
 #include <string.h>
 #include <sys/file.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 #include <unistd.h>
 #define HASH_SIZE SHA256_DIGEST_LENGTH
 
@@ -36,6 +37,7 @@
 #define REPLACE_FLAG 0x10
 #define UNLOCK_FLAG 0x20
 #define VALIDATE_FLAG 0x40
+#define EXEC_FLAG 0x80
 
 char lock_filename[256];
 char temp_filename[256];
@@ -327,6 +329,80 @@ int validate_mode(int _, char** __, int flags) {
     return (invalid_count > 0) ? 1 : 0;
 }
 
+int exec_mode(int argc, char** argv, int flags) {
+    (void)flags;
+    
+    if (argc < 1) {
+        fprintf(stderr, "Error: No command provided for exec mode\n");
+        return -1;
+    }
+    
+    if (access(temp_filename, F_OK) == -1) {
+        return 0;
+    }
+    
+    FILE* temp_file = fopen(temp_filename, "r");
+    if (!temp_file) {
+        perror("Failed to open temp file");
+        return -1;
+    }
+    
+    char* line = NULL;
+    size_t len = 0;
+    ssize_t read;
+    
+    while ((read = getline(&line, &len, temp_file)) != -1) {
+        line[strcspn(line, "\n")] = '\0';
+        
+        // Build command with argument substitution
+        char** cmd_args = malloc((argc + 2) * sizeof(char*));
+        if (!cmd_args) {
+            perror("Failed to allocate memory");
+            free(line);
+            fclose(temp_file);
+            return -1;
+        }
+        
+        int cmd_argc = 0;
+        for (int i = 0; i < argc; i++) {
+            if (strcmp(argv[i], "{}") == 0) {
+                cmd_args[cmd_argc++] = line;
+            } else {
+                cmd_args[cmd_argc++] = argv[i];
+            }
+        }
+        cmd_args[cmd_argc] = NULL;
+        
+        // Fork and execute command
+        pid_t pid = fork();
+        if (pid == 0) {
+            // Child process
+            execvp(cmd_args[0], cmd_args);
+            perror("Failed to execute command");
+            exit(EXIT_FAILURE);
+        } else if (pid > 0) {
+            // Parent process
+            int status;
+            waitpid(pid, &status, 0);
+            if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
+                fprintf(stderr, "Command failed for path: %s\n", line);
+            }
+        } else {
+            perror("Failed to fork");
+            free(cmd_args);
+            free(line);
+            fclose(temp_file);
+            return -1;
+        }
+        
+        free(cmd_args);
+    }
+    
+    free(line);
+    fclose(temp_file);
+    return 0;
+}
+
 int print_help() {
     printf("Usage: fsel [options] [paths...]\n"
            "Options:\n"
@@ -337,10 +413,12 @@ int print_help() {
            "  -r          Replace the selection with new paths\n"
            "  -u          Remove the lock file\n"
            "  -v          Validate the selection\n"
+           "  -e          Execute command for each selected path\n"
            "  -h          Show this help\n"
            "\n"
            "When no paths are provided, list mode is used by default.\n"
-           "When paths are provided without -r, they are added to the selection.\n");
+           "When paths are provided without -r, they are added to the selection.\n"
+           "Use -e with a command to execute it for each path (use '{}' to substitute path).\n");
     return 0;
 }
 
@@ -357,7 +435,7 @@ int main(int argc, char** argv) {
 
     int opt;
     int flags = 0;
-    while ((opt = getopt(argc, argv, "qscfruvh")) != -1) {
+    while ((opt = getopt(argc, argv, "qscfruvhe")) != -1) {
         switch (opt) {
             case 'q':
                 flags |= QUIET_FLAG;
@@ -380,6 +458,9 @@ int main(int argc, char** argv) {
             case 'v':
                 flags |= VALIDATE_FLAG;
                 break;
+            case 'e':
+                flags |= EXEC_FLAG;
+                break;
             case 'h':
                 return print_help();
             default:
@@ -395,6 +476,14 @@ int main(int argc, char** argv) {
 
     if (flags & VALIDATE_FLAG) {
         return validate_mode(0, NULL, flags);
+    }
+
+    if (flags & EXEC_FLAG) {
+        if (optind >= argc) {
+            fprintf(stderr, "Error: No command provided for exec mode\n");
+            return EXIT_FAILURE;
+        }
+        return exec_mode(argc - optind, argv + optind, flags);
     }
 
     if (flags & CLEAR_FLAG && optind >= argc) {
