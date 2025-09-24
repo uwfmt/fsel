@@ -1,4 +1,3 @@
-# fsel — a utility for managing file selections in a shell
 
 A CLI utility to manage file selections for batch operations in Linux
 environments. Store, retrieve, and manipulate file lists between different
@@ -52,38 +51,31 @@ sudo make install  # Optional, installs to /usr/local/bin
 
 ### Basic Commands
 ```bash
-# Append files from different places into selection
 fsel ~/*.log
 fsel /var/lelog/**/*.log
 
-# Use prepared selection in any shell operation
 for f in `fsel`; do mv $f /var/archive; done
 ```
 
 ### Advanced Examples
 ```bash
-# Add paths from current directory, they will be converted to absolute paths
 ls -1 *.bak | fsel
 
-# Select even more from interactive TUI utility like `fzf`
 fzf -m | fsel
 
-# Add results of `find`
 find /home -name '*.conf' | fsel
 
-# Use sorted selection and clear after using it
 for f in `fsel -sc`; do cp $f /mnt/backup; done
 ```
 
 Forcely overwrite old selections when it needed:
 
 ``` bash
-# Force replace locked list
 fsel -fr important_file.*
 
-# Unlock when operation failed
 fsel -u
-> Release existing lock? [Y/N] y
+
+
 ```
 
 ## Operational Modes
@@ -109,12 +101,13 @@ Also check man page for using details.
 | `-f` | Force operation ignoring lockfile |
 | `-h` | Show usage information            |
 | `-v` | Validate the selection            |
+| `-l` | Long format output (like ls -l)   |
 
 ## Technical Details
 
-- **Storage Location**: `{$TMPDIR}/fsel_<UID>.tmp` (by default in `/tmp`)
-- **Index Files**: SHA-256 hashes in `{$TMPDIR}/fsel_<UID>.idx`
-- **Lockfiles**: `{$TMPDIR}/fsel_<UID>.lock` for operation safety
+- **Storage Location**: `$TMPDIR/fsel_<UID>.tmp` (defaults to `/tmp` if TMPDIR not set)
+- **Index Files**: SHA-256 hashes in `$TMPDIR/fsel_<UID>.idx`
+- **Lockfiles**: `$TMPDIR/fsel_<UID>.lock` for operation safety
 - **Security**: 0600 permissions on all user files
 
 ## License [![License: GPL](https://img.shields.io/badge/License-GPLv3-green.svg)](https://opensource.org/licenses/gpl-3-0)

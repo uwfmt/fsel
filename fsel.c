@@ -17,14 +17,17 @@
 #include <fcntl.h>
 #include <getopt.h>
 #include <glob.h>
+#include <grp.h>
 #include <libgen.h>
 #include <openssl/evp.h>
 #include <openssl/sha.h>
+#include <pwd.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/file.h>
 #include <sys/stat.h>
+#include <time.h>
 #include <unistd.h>
 #define HASH_SIZE SHA256_DIGEST_LENGTH
 
@@ -36,6 +39,7 @@
 #define REPLACE_FLAG 0x10
 #define UNLOCK_FLAG 0x20
 #define VALIDATE_FLAG 0x40
+#define LONG_FORMAT_FLAG 0x80
 
 char lock_filename[256];
 char temp_filename[256];
@@ -119,6 +123,61 @@ char* safe_strdup(const char* str) {
         exit(EXIT_FAILURE);
     }
     return new_str;
+}
+
+// Function to format time like ls -l
+void format_time(char* buffer, size_t size, time_t time_val) {
+    time_t now = time(NULL);
+    // If file is older than 6 months, show year instead of time
+    if (now - time_val > 180 * 24 * 60 * 60) {
+        strftime(buffer, size, "%b %d  %Y", localtime(&time_val));
+    } else {
+        strftime(buffer, size, "%b %d %H:%M", localtime(&time_val));
+    }
+}
+
+// Function to print file info in ls -l format
+void print_file_info(const char* path) {
+    struct stat st;
+    if (stat(path, &st) == -1) {
+        printf("Could not stat %s\n", path);
+        return;
+    }
+
+    // File type and permissions
+    char perms[11];
+    if (S_ISDIR(st.st_mode)) {
+        perms[0] = 'd';
+    } else if (S_ISCHR(st.st_mode)) {
+        perms[0] = 'c';
+    } else if (S_ISBLK(st.st_mode)) {
+        perms[0] = 'b';
+    } else {
+        perms[0] = '-';
+    }
+    perms[1] = (st.st_mode & S_IRUSR) ? 'r' : '-';
+    perms[2] = (st.st_mode & S_IWUSR) ? 'w' : '-';
+    perms[3] = (st.st_mode & S_IXUSR) ? 'x' : '-';
+    perms[4] = (st.st_mode & S_IRGRP) ? 'r' : '-';
+    perms[5] = (st.st_mode & S_IWGRP) ? 'w' : '-';
+    perms[6] = (st.st_mode & S_IXGRP) ? 'x' : '-';
+    perms[7] = (st.st_mode & S_IROTH) ? 'r' : '-';
+    perms[8] = (st.st_mode & S_IWOTH) ? 'w' : '-';
+    perms[9] = (st.st_mode & S_IXOTH) ? 'x' : '-';
+    perms[10] = '\0';
+
+    // Get user and group names
+    struct passwd* pwd = getpwuid(st.st_uid);
+    struct group* grp = getgrgid(st.st_gid);
+    char* user = pwd ? pwd->pw_name : "?";
+    char* group = grp ? grp->gr_name : "?";
+
+    // Format time
+    char time_str[20];
+    format_time(time_str, sizeof(time_str), st.st_mtime);
+
+    // Print in ls -l format with aligned columns
+    printf("%s %3ld %-8s %-8s %8ld %s %s\n", perms, (long)st.st_nlink, user, group, (long)st.st_size, time_str, path);
 }
 
 int add_mode(int argc, char** argv, int flags) {
@@ -227,13 +286,23 @@ int list_mode(int _, char** __, int flags) {
         }
         qsort(lines, count, sizeof(char*), (int (*)(const void*, const void*))strcmp);
         for (size_t i = 0; i < count; i++) {
-            printf("%s", lines[i]);
+            if (flags & LONG_FORMAT_FLAG) {
+                line[strcspn(lines[i], "\n")] = '\0';
+                print_file_info(lines[i]);
+            } else {
+                printf("%s", lines[i]);
+            }
             free(lines[i]);
         }
         free(lines);
     } else {
         while ((read = getline(&line, &len, temp_file)) != -1) {
-            printf("%s", line);
+            if (flags & LONG_FORMAT_FLAG) {
+                line[strcspn(line, "\n")] = '\0';
+                print_file_info(line);
+            } else {
+                printf("%s", line);
+            }
         }
     }
     free(line);
@@ -337,6 +406,7 @@ int print_help() {
            "  -r          Replace the selection with new paths\n"
            "  -u          Remove the lock file\n"
            "  -v          Validate the selection\n"
+           "  -l          Long format output (like ls -l)\n"
            "  -h          Show this help\n"
            "\n"
            "When no paths are provided, list mode is used by default.\n"
@@ -357,7 +427,7 @@ int main(int argc, char** argv) {
 
     int opt;
     int flags = 0;
-    while ((opt = getopt(argc, argv, "qscfruvh")) != -1) {
+    while ((opt = getopt(argc, argv, "qscfruvhl")) != -1) {
         switch (opt) {
             case 'q':
                 flags |= QUIET_FLAG;
@@ -379,6 +449,9 @@ int main(int argc, char** argv) {
                 break;
             case 'v':
                 flags |= VALIDATE_FLAG;
+                break;
+            case 'l':
+                flags |= LONG_FORMAT_FLAG;
                 break;
             case 'h':
                 return print_help();

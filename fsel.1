@@ -2,7 +2,7 @@
 .\" Encoding: UTF-8
 .TH FSEL 1 "2025-03-12" "v0.1" "File Paths Selector"
 .SH NAME
-fsel \- manage paths selections for batch operations
+fsel \- manage file lists for batch operations
 .SH SYNOPSIS
 .B fsel
 [\fIOPTIONS\fP] [\fIPATHS...\fP]
@@ -30,6 +30,9 @@ Force remove stale lockfile after confirmation
 .TP
 .B \-v
 Validate the selection
+.TP
+.B \-l
+Long format output (like ls -l)
 .TP
 .B \-h
 Display this help message
@@ -59,15 +62,20 @@ Emergency unlock:
 .B $ fsel \-u
 .B Other fsel acquired lock. Release existing lock? [Y/N] y
 .fi
+
+List with detailed information:
+.nf
+.B $ fsel \-l
+.fi
 .SH FILES
 .TP
-.B /tmp/fsel_<UID>.tmp
-Main storage file (user-specific)
+.B $TMPDIR/fsel_<UID>.tmp
+Main storage file (user-specific, defaults to /tmp)
 .TP
-.B /tmp/fsel_<UID>.idx
+.B $TMPDIR/fsel_<UID>.idx
 SHA-256 hash index (binary format)
 .TP
-.B /tmp/fsel_<UID>.lock
+.B $TMPDIR/fsel_<UID>.lock
 User-specific operation lockfile
 .SH SECURITY
 All user files created with 0600 permissions. Lockfiles prevent concurrent modifications. SHA-256 hashing ensures path uniqueness.
