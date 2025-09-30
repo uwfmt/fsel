@@ -83,7 +83,11 @@ int process_path(const char* path, FILE* temp_file, FILE* index_file) {
         return 0;
     }
     fprintf(temp_file, "%s\n", abs_path);
-    fwrite(hash, HASH_SIZE, 1, index_file);
+    if (fwrite(hash, HASH_SIZE, 1, index_file) != 1) {
+        fprintf(stderr, "Failed to write hash for: %s\n", abs_path);
+        free(abs_path);
+        return 0;
+    }
     free(abs_path);
     return 1;
 }
@@ -125,6 +129,10 @@ char* safe_strdup(const char* str) {
     return new_str;
 }
 
+int compare_strings(const void* a, const void* b) {
+    return strcmp(*(char**)a, *(char**)b);
+}
+
 // Function to format time like ls -l
 void format_time(char* buffer, size_t size, time_t time_val) {
     time_t now = time(NULL);
@@ -139,19 +147,25 @@ void format_time(char* buffer, size_t size, time_t time_val) {
 // Function to print file info in ls -l format
 void print_file_info(const char* path) {
     struct stat st;
-    if (stat(path, &st) == -1) {
+    if (lstat(path, &st) == -1) {
         printf("Could not stat %s\n", path);
         return;
     }
 
     // File type and permissions
     char perms[11];
-    if (S_ISDIR(st.st_mode)) {
+    if (S_ISLNK(st.st_mode)) {
+        perms[0] = 'l';
+    } else if (S_ISDIR(st.st_mode)) {
         perms[0] = 'd';
     } else if (S_ISCHR(st.st_mode)) {
         perms[0] = 'c';
     } else if (S_ISBLK(st.st_mode)) {
         perms[0] = 'b';
+    } else if (S_ISFIFO(st.st_mode)) {
+        perms[0] = 'p';
+    } else if (S_ISSOCK(st.st_mode)) {
+        perms[0] = 's';
     } else {
         perms[0] = '-';
     }
@@ -177,7 +191,18 @@ void print_file_info(const char* path) {
     format_time(time_str, sizeof(time_str), st.st_mtime);
 
     // Print in ls -l format with aligned columns
-    printf("%s %3ld %-8s %-8s %8ld %s %s\n", perms, (long)st.st_nlink, user, group, (long)st.st_size, time_str, path);
+    printf("%s %3ld %-8s %-8s %8ld %s %s", perms, (long)st.st_nlink, user, group, (long)st.st_size, time_str, path);
+
+    // For symlinks, show the target
+    if (S_ISLNK(st.st_mode)) {
+        char link_target[1024];
+        ssize_t len = readlink(path, link_target, sizeof(link_target) - 1);
+        if (len != -1) {
+            link_target[len] = '\0';
+            printf(" -> %s", link_target);
+        }
+    }
+    printf("\n");
 }
 
 int add_mode(int argc, char** argv, int flags) {
@@ -219,7 +244,7 @@ int add_mode(int argc, char** argv, int flags) {
         return -1;
     }
     int count = 0;
-    // 1. Обработка аргументов командной строки
+    // 1. Process command line arguments
     for (int i = 0; i < argc; i++) {
         glob_t glob_result;
         if (glob(argv[i], GLOB_TILDE | GLOB_MARK, NULL, &glob_result) == 0) {
@@ -229,7 +254,7 @@ int add_mode(int argc, char** argv, int flags) {
             globfree(&glob_result);
         }
     }
-    // 2. Чтение из stdin ТОЛЬКО если он не пустой
+    // 2. Read from stdin ONLY if it's not empty
     if (!isatty(fileno(stdin))) {
         char* line = NULL;
         size_t len = 0;
@@ -280,14 +305,27 @@ int list_mode(int _, char** __, int flags) {
         char** lines = NULL;
         size_t count = 0;
         while ((read = getline(&line, &len, temp_file)) != -1) {
-            lines = realloc(lines, (count + 1) * sizeof(char*));
+            char** tmp = realloc(lines, (count + 1) * sizeof(char*));
+            if (!tmp) {
+                perror("Failed to allocate memory for lines");
+                for (size_t i = 0; i < count; i++) {
+                    free(lines[i]);
+                }
+                free(lines);
+                free(line);
+                fclose(temp_file);
+                if (flags & CLEAR_FLAG)
+                    remove_lock_file();
+                return -1;
+            }
+            lines = tmp;
             lines[count] = safe_strdup(line);
             count++;
         }
-        qsort(lines, count, sizeof(char*), (int (*)(const void*, const void*))strcmp);
+        qsort(lines, count, sizeof(char*), compare_strings);
         for (size_t i = 0; i < count; i++) {
             if (flags & LONG_FORMAT_FLAG) {
-                line[strcspn(lines[i], "\n")] = '\0';
+                lines[i][strcspn(lines[i], "\n")] = '\0';
                 print_file_info(lines[i]);
             } else {
                 printf("%s", lines[i]);
@@ -423,7 +461,7 @@ int main(int argc, char** argv) {
     int uid = getuid();
     snprintf(temp_filename, sizeof(temp_filename), "%s/fsel_%d.tmp", tmpdir, uid);
     snprintf(index_filename, sizeof(index_filename), "%s/fsel_%d.idx", tmpdir, uid);
-    snprintf(lock_filename, sizeof(index_filename), "%s/fsel_%d.lock", tmpdir, uid);
+    snprintf(lock_filename, sizeof(lock_filename), "%s/fsel_%d.lock", tmpdir, uid);
 
     int opt;
     int flags = 0;
@@ -481,6 +519,4 @@ int main(int argc, char** argv) {
 
     // When paths are provided, use add mode
     return add_mode(argc - optind, argv + optind, flags);
-
-    return EXIT_SUCCESS;
 }
