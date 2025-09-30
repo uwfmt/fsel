@@ -19,6 +19,7 @@
 #include <glob.h>
 #include <grp.h>
 #include <libgen.h>
+#include <limits.h>
 #include <openssl/evp.h>
 #include <openssl/sha.h>
 #include <pwd.h>
@@ -41,9 +42,9 @@
 #define VALIDATE_FLAG 0x40
 #define LONG_FORMAT_FLAG 0x80
 
-char lock_filename[256];
-char temp_filename[256];
-char index_filename[256];
+char lock_filename[PATH_MAX];
+char temp_filename[PATH_MAX];
+char index_filename[PATH_MAX];
 
 void compute_hash(const char* path, unsigned char* hash) {
     EVP_MD_CTX* ctx = EVP_MD_CTX_new();
@@ -459,9 +460,22 @@ int main(int argc, char** argv) {
     }
 
     int uid = getuid();
-    snprintf(temp_filename, sizeof(temp_filename), "%s/fsel_%d.tmp", tmpdir, uid);
-    snprintf(index_filename, sizeof(index_filename), "%s/fsel_%d.idx", tmpdir, uid);
-    snprintf(lock_filename, sizeof(lock_filename), "%s/fsel_%d.lock", tmpdir, uid);
+    int ret;
+    ret = snprintf(temp_filename, sizeof(temp_filename), "%s/fsel_%d.tmp", tmpdir, uid);
+    if (ret < 0 || ret >= (int)sizeof(temp_filename)) {
+        fprintf(stderr, "Error: Path too long for temp file\n");
+        return EXIT_FAILURE;
+    }
+    ret = snprintf(index_filename, sizeof(index_filename), "%s/fsel_%d.idx", tmpdir, uid);
+    if (ret < 0 || ret >= (int)sizeof(index_filename)) {
+        fprintf(stderr, "Error: Path too long for index file\n");
+        return EXIT_FAILURE;
+    }
+    ret = snprintf(lock_filename, sizeof(lock_filename), "%s/fsel_%d.lock", tmpdir, uid);
+    if (ret < 0 || ret >= (int)sizeof(lock_filename)) {
+        fprintf(stderr, "Error: Path too long for lock file\n");
+        return EXIT_FAILURE;
+    }
 
     int opt;
     int flags = 0;
