@@ -1,25 +1,68 @@
+# fsel is a file selection tool
 
-A CLI utility to manage file selections for batch operations in Linux
-environments. Store, retrieve, and manipulate file lists between different
-command runs. It keeps the list persistently until you remove it explicitly.
+A CLI utility that manages file selections for batch operations on Unix.
+Store, retrieve, and manipulate file lists across command runs.
+Selections persist until you explicitly clear them.
 
 ## Why?
 
-Unix command-line utilities provide basic file operations such as copy, move,
-rename, and delete, but lack a "select" operation. This utility fills that gap
-by adding a "select" feature to the standard set of operations that available in
-CLI. It just makes CLI file management great again!
+### This tool makes console file management more convenient
 
-Imagine you need to select hundreds/thousand of files scattered across various
-directories and add them as arguments to a simple command like `cp`. Navigating
-through directories with all the masks (like "?*") and even modern autocomplete
-features makes this task cumbersome for editing, unless you're using a dedicated
-file manager (like `Midnight Commander`, `Ranger` and so on).
+Unix is great for file operations due to the customizability of its shells.
+However, by default they provide only basic file operations (copy, move,
+rename, delete) and lack a persistent selection mechanism. When you need to
+collect hundreds or thousands of files scattered across different directories,
+traditional approaches fail:
 
-With `fsel` and powerful search utilities with filtering, such as `fzf`, you
-can easily compile the necessary list of files, iterating as needed and moving
-through the file tree. Finally, you can use this list in a shell script or a
-specific command (for example, in a loop: `for f in $(fsel); do cp -a "$f"; done`).
+- **Shell globs** are limited to single directory patterns
+- **Find with -exec** requires knowing all criteria upfront, no iterative refinement
+- **Manual file arguments** become unwieldy beyond a dozen paths
+- **Xargs pipelines** don't preserve selections between commands
+
+`fsel` solves this by decoupling file selection from file operations. You can:
+
+1. Build your selection iteratively over multiple commands
+2. Refine it using different search tools (`find`, `fzf`, `fd`, custom scripts)
+3. Verify the selection before applying operations
+4. Reuse the same selection for multiple different commands
+5. Process thousands of files without command-line length limits
+
+Example workflow:
+```bash
+find /project -name '*.log' | fsel          # Initial selection
+find /backup -mtime +30 -name '*.log' | fsel  # Add more files
+fsel -v                                     # Validate all paths exist
+fsel | xargs tar czf logs.tar.gz            # Archive them
+fsel | xargs -I{} rsync {} backup:/storage/ # Then backup
+fsel -c                                     # Clear when done
+```
+
+### Unified selection buffer across different file managers
+
+`fsel` provides a shared selection buffer that works across completely different
+file management interfaces. This enables workflows that were previously impossible:
+
+Real-world example using Emacs Dired with shell commands:
+
+1. Navigate and mark files in Dired (visual interface, powerful filtering)
+2. Export selection to `fsel` via [emacs-fm](https://github.com/uwfmt/emacs-fm)
+   integration (one command `* S` in Dired buffer)
+3. Switch to terminal and process files with any Unix tools
+
+```bash
+# In terminal, use the same selection:
+fsel | xargs -I{} convert {} -resize 50% resized/{}
+fsel | parallel gzip {}
+fsel -c  # Clear when done
+```
+
+This works potentially with any file manager that implements `fsel` integration,
+like it did for Dired (Emacs). The selection buffer is the universal interface!
+
+> While I don't claim that `fsel` format should become the standard, the
+> approach of having a standardized selection format that persists across
+> different tool invocations certainly deserves the attention of file managment
+> tools developers.
 
 ## Features
 
@@ -89,9 +132,10 @@ fsel -u
 | `unlock`    | `-u` | Remove stale lockfile                                    |
 | `validate`  | `-v` | Validate the selection                                   |
 
-Also check man page for using details.
+Also remember that old good `man` page available for this utility.
 
 ## Options
+Just `fsel -h` for help.
 
 | Flag | Description                       |
 |------|-----------------------------------|
@@ -109,6 +153,10 @@ Also check man page for using details.
 - **Index Files**: SHA-256 hashes in `$TMPDIR/fsel_<UID>.idx`
 - **Lockfiles**: `$TMPDIR/fsel_<UID>.lock` for operation safety
 - **Security**: 0600 permissions on all user files
+
+## Integrations
+
+* [emacs-fm](https://github.com/uwfmt/emacs-fm) — extension for Dired inside GNU/Emacs
 
 ## License [![License: GPL](https://img.shields.io/badge/License-GPLv3-green.svg)](https://opensource.org/licenses/gpl-3-0)
 
