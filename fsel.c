@@ -526,7 +526,8 @@ int main(int argc, char** argv) {
         return clear_mode(0, NULL, flags);
     }
 
-    if (optind >= argc) {
+    int has_input = !isatty(fileno(stdin));
+    if (optind >= argc && !has_input) {
         // When no paths are provided, default to list mode
         return list_mode(0, NULL, flags);
     }
