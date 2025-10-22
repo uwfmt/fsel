@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -Wall -Wextra -std=c11 -D_XOPEN_SOURCE=500
+CFLAGS = -Wall -Wextra -std=c11
 LDFLAGS =
 LIBS = -lcrypto
 PREFIX ?= /usr/local
@@ -12,6 +12,7 @@ fsel: fsel.c
 install: fsel
 	install -d $(DESTDIR)$(PREFIX)/bin
 	install -m 0755 fsel $(DESTDIR)$(PREFIX)/bin
+	install -d $(DESTDIR)$(PREFIX)/share/man/man1
 	install -m 0644 fsel.1 $(DESTDIR)$(PREFIX)/share/man/man1
 
 uninstall:
