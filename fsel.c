@@ -654,7 +654,7 @@ int maybe_compact(void) {
     int tombstones = 0;
     count_storage(&active, &tombstones);
     int total = active + tombstones;
-    if (tombstones > 0 && tombstones * 10 > total * 3) {
+    if (total >= 100 && tombstones * 10 > total * 3) {
         return compact_storage();
     }
     return 0;
