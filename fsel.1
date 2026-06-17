@@ -34,6 +34,9 @@ Validate the selection
 .B \-l
 Long format output (like ls -l)
 .TP
+.B \-d
+Remove specific paths from the selection
+.TP
 .B \-h
 Display this help message
 .SH EXAMPLES
@@ -55,6 +58,11 @@ Output sorted list to rsync:
 Clear selection:
 .nf
 .B $ fsel \-c
+.fi
+
+Remove paths from selection:
+.nf
+.B $ fsel \-d ./obsolete.log /tmp/stale-file
 .fi
 
 Emergency unlock:

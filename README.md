@@ -129,6 +129,7 @@ fsel -u
 | `replace`   | `-r` | Replace existing selection with new one                  |
 | `list`      |      | Output stored into selection file paths (default)        |
 | `clear`     | `-c` | Clear the selection                                      |
+| `delete`    | `-d` | Remove specific paths from selection                     |
 | `unlock`    | `-u` | Remove stale lockfile                                    |
 | `validate`  | `-v` | Validate the selection                                   |
 
@@ -146,6 +147,7 @@ Just `fsel -h` for help.
 | `-h` | Show usage information            |
 | `-v` | Validate the selection            |
 | `-l` | Long format output (like ls -l)   |
+| `-d` | Remove paths from selection       |
 
 ## Technical Details
 

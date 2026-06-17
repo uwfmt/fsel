@@ -41,10 +41,47 @@
 #define UNLOCK_FLAG 0x20
 #define VALIDATE_FLAG 0x40
 #define LONG_FORMAT_FLAG 0x80
+#define DELETE_FLAG 0x100
 
 char lock_filename[PATH_MAX];
 char temp_filename[PATH_MAX];
 char index_filename[PATH_MAX];
+
+int is_active_line(const char* line) {
+    return line != NULL && line[0] == '/';
+}
+
+int is_zero_hash(const unsigned char* hash) {
+    for (int i = 0; i < HASH_SIZE; i++) {
+        if (hash[i] != 0) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+void count_storage(int* active, int* tombstones) {
+    *active = 0;
+    *tombstones = 0;
+    if (access(temp_filename, F_OK) == -1) {
+        return;
+    }
+    FILE* temp_file = fopen(temp_filename, "r");
+    if (!temp_file) {
+        return;
+    }
+    char* line = NULL;
+    size_t len = 0;
+    while (getline(&line, &len, temp_file) != -1) {
+        if (is_active_line(line)) {
+            (*active)++;
+        } else if (len > 0) {
+            (*tombstones)++;
+        }
+    }
+    free(line);
+    fclose(temp_file);
+}
 
 void compute_hash(const char* path, unsigned char* hash) {
     EVP_MD_CTX* ctx = EVP_MD_CTX_new();
@@ -59,10 +96,81 @@ int hash_exists(FILE* index_file, unsigned char* hash) {
     rewind(index_file);
     unsigned char buffer[HASH_SIZE];
     while (fread(buffer, HASH_SIZE, 1, index_file)) {
+        if (is_zero_hash(buffer)) {
+            continue;
+        }
         if (memcmp(buffer, hash, HASH_SIZE) == 0) {
             return 1;
         }
     }
+    return 0;
+}
+
+int reuse_tombstone_slot(const char* abs_path, const unsigned char* hash) {
+    FILE* temp_file = fopen(temp_filename, "r+");
+    if (!temp_file) {
+        return 0;
+    }
+    FILE* index_file = fopen(index_filename, "r+");
+    if (!index_file) {
+        fclose(temp_file);
+        return 0;
+    }
+
+    char* line = NULL;
+    size_t len = 0;
+    ssize_t read;
+    off_t offset = 0;
+    int line_index = 0;
+    size_t path_len = strlen(abs_path);
+
+    while ((read = getline(&line, &len, temp_file)) != -1) {
+        size_t line_len = (size_t)read;
+        if (!is_active_line(line)) {
+            if (path_len + 1 <= line_len) {
+                char* buf = malloc(line_len);
+                if (!buf) {
+                    perror("Failed to allocate memory");
+                    free(line);
+                    fclose(temp_file);
+                    fclose(index_file);
+                    return 0;
+                }
+                memcpy(buf, abs_path, path_len);
+                buf[path_len] = '\n';
+                if (line_len > path_len + 1) {
+                    memset(buf + path_len + 1, ' ', line_len - path_len - 1);
+                }
+                fseek(temp_file, offset, SEEK_SET);
+                if (fwrite(buf, 1, line_len, temp_file) != line_len) {
+                    perror("Failed to reuse tombstone slot");
+                    free(buf);
+                    free(line);
+                    fclose(temp_file);
+                    fclose(index_file);
+                    return 0;
+                }
+                free(buf);
+                fseek(index_file, (long)line_index * HASH_SIZE, SEEK_SET);
+                if (fwrite(hash, HASH_SIZE, 1, index_file) != 1) {
+                    perror("Failed to write hash for reused slot");
+                    free(line);
+                    fclose(temp_file);
+                    fclose(index_file);
+                    return 0;
+                }
+                free(line);
+                fclose(temp_file);
+                fclose(index_file);
+                return 1;
+            }
+        }
+        offset += read;
+        line_index++;
+    }
+    free(line);
+    fclose(temp_file);
+    fclose(index_file);
     return 0;
 }
 
@@ -82,6 +190,10 @@ int process_path(const char* path, FILE* temp_file, FILE* index_file) {
     if (hash_exists(index_file, hash)) {
         free(abs_path);
         return 0;
+    }
+    if (reuse_tombstone_slot(abs_path, hash)) {
+        free(abs_path);
+        return 1;
     }
     fprintf(temp_file, "%s\n", abs_path);
     if (fwrite(hash, HASH_SIZE, 1, index_file) != 1) {
@@ -268,12 +380,11 @@ int add_mode(int argc, char** argv, int flags) {
     fclose(temp_file);
     fclose(index_file);
     if (!(flags & QUIET_FLAG)) {
-        struct stat st;
-        int total = 0;
-        if (stat(index_filename, &st) == 0) {
-            total = st.st_size / HASH_SIZE;
-        }
-        printf("%d paths added / %d paths total\n", count, total);
+        int active = 0;
+        int tombstones = 0;
+        count_storage(&active, &tombstones);
+        (void)tombstones;
+        printf("%d paths added / %d paths total\n", count, active);
     }
     remove_lock_file();
     return 0;
@@ -306,6 +417,9 @@ int list_mode(int _, char** __, int flags) {
         char** lines = NULL;
         size_t count = 0;
         while ((read = getline(&line, &len, temp_file)) != -1) {
+            if (!is_active_line(line)) {
+                continue;
+            }
             char** tmp = realloc(lines, (count + 1) * sizeof(char*));
             if (!tmp) {
                 perror("Failed to allocate memory for lines");
@@ -336,6 +450,9 @@ int list_mode(int _, char** __, int flags) {
         free(lines);
     } else {
         while ((read = getline(&line, &len, temp_file)) != -1) {
+            if (!is_active_line(line)) {
+                continue;
+            }
             if (flags & LONG_FORMAT_FLAG) {
                 line[strcspn(line, "\n")] = '\0';
                 print_file_info(line);
@@ -416,6 +533,9 @@ int validate_mode(int _, char** __, int flags) {
 
     while ((read = getline(&line, &len, temp_file)) != -1) {
         line[strcspn(line, "\n")] = '\0';
+        if (!is_active_line(line)) {
+            continue;
+        }
         struct stat st;
         if (stat(line, &st) == 0) {
             printf("✓ %s\n", line);
@@ -435,6 +555,343 @@ int validate_mode(int _, char** __, int flags) {
     return (invalid_count > 0) ? 1 : 0;
 }
 
+int compact_storage(void) {
+    char temp_new[PATH_MAX];
+    char index_new[PATH_MAX];
+    int ret = snprintf(temp_new, sizeof(temp_new), "%s.new", temp_filename);
+    if (ret < 0 || ret >= (int)sizeof(temp_new)) {
+        fprintf(stderr, "Error: Path too long for temp new file\n");
+        return -1;
+    }
+    ret = snprintf(index_new, sizeof(index_new), "%s.new", index_filename);
+    if (ret < 0 || ret >= (int)sizeof(index_new)) {
+        fprintf(stderr, "Error: Path too long for index new file\n");
+        return -1;
+    }
+
+    FILE* temp_file = fopen(temp_filename, "r");
+    if (!temp_file) {
+        perror("Failed to open temp file");
+        return -1;
+    }
+    FILE* index_file = fopen(index_filename, "rb");
+    if (!index_file) {
+        perror("Failed to open index file");
+        fclose(temp_file);
+        return -1;
+    }
+    FILE* temp_out = fopen(temp_new, "w");
+    if (!temp_out) {
+        perror("Failed to create temp new file");
+        fclose(temp_file);
+        fclose(index_file);
+        return -1;
+    }
+    FILE* index_out = fopen(index_new, "wb");
+    if (!index_out) {
+        perror("Failed to create index new file");
+        fclose(temp_file);
+        fclose(index_file);
+        fclose(temp_out);
+        unlink(temp_new);
+        return -1;
+    }
+
+    char* line = NULL;
+    size_t len = 0;
+    unsigned char hash[HASH_SIZE];
+    int rc = 0;
+
+    while (getline(&line, &len, temp_file) != -1) {
+        if (!is_active_line(line)) {
+            if (fread(hash, HASH_SIZE, 1, index_file) != 1) {
+                fprintf(stderr, "Index file out of sync with temp file\n");
+                rc = -1;
+                break;
+            }
+            continue;
+        }
+        fprintf(temp_out, "%s", line);
+        if (fread(hash, HASH_SIZE, 1, index_file) != 1) {
+            fprintf(stderr, "Index file out of sync with temp file\n");
+            rc = -1;
+            break;
+        }
+        if (fwrite(hash, HASH_SIZE, 1, index_out) != 1) {
+            perror("Failed to write hash");
+            rc = -1;
+            break;
+        }
+    }
+
+    free(line);
+    fclose(temp_file);
+    fclose(index_file);
+    fclose(temp_out);
+    fclose(index_out);
+
+    if (rc != 0) {
+        unlink(temp_new);
+        unlink(index_new);
+        return -1;
+    }
+
+    if (rename(temp_new, temp_filename) != 0) {
+        perror("Failed to rename temp file");
+        unlink(temp_new);
+        unlink(index_new);
+        return -1;
+    }
+    if (rename(index_new, index_filename) != 0) {
+        perror("Failed to rename index file");
+        return -1;
+    }
+    return 0;
+}
+
+int maybe_compact(void) {
+    int active = 0;
+    int tombstones = 0;
+    count_storage(&active, &tombstones);
+    int total = active + tombstones;
+    if (tombstones > 0 && tombstones * 10 > total * 3) {
+        return compact_storage();
+    }
+    return 0;
+}
+
+char* resolve_delete_key(const char* path) {
+    struct stat st;
+    if (stat(path, &st) == 0) {
+        char* abs_path = realpath(path, NULL);
+        if (!abs_path) {
+            fprintf(stderr, "Invalid path: %s\n", path);
+            return NULL;
+        }
+        return abs_path;
+    }
+    return safe_strdup(path);
+}
+
+int path_matches_delete(const char* stored, const char* key) {
+    char stored_copy[PATH_MAX];
+    if (strlen(stored) >= sizeof(stored_copy)) {
+        return 0;
+    }
+    strcpy(stored_copy, stored);
+    stored_copy[strcspn(stored_copy, "\n")] = '\0';
+    return strcmp(stored_copy, key) == 0;
+}
+
+int key_in_list(char** keys, size_t count, const char* key) {
+    for (size_t i = 0; i < count; i++) {
+        if (strcmp(keys[i], key) == 0) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+int keys_add(char*** keys, size_t* count, const char* path) {
+    char* key = resolve_delete_key(path);
+    if (!key) {
+        return -1;
+    }
+    if (key_in_list(*keys, *count, key)) {
+        free(key);
+        return 0;
+    }
+    char** tmp = realloc(*keys, (*count + 1) * sizeof(char*));
+    if (!tmp) {
+        perror("Failed to allocate memory");
+        free(key);
+        return -1;
+    }
+    *keys = tmp;
+    (*keys)[*count] = key;
+    (*count)++;
+    return 0;
+}
+
+void keys_free(char** keys, size_t count) {
+    for (size_t i = 0; i < count; i++) {
+        free(keys[i]);
+    }
+    free(keys);
+}
+
+int collect_delete_targets(int argc, char** argv, char*** keys_out, size_t* count_out) {
+    char** keys = NULL;
+    size_t count = 0;
+
+    for (int i = 0; i < argc; i++) {
+        glob_t glob_result;
+        int glob_ok = glob(argv[i], GLOB_TILDE | GLOB_MARK, NULL, &glob_result);
+        if (glob_ok == 0 && glob_result.gl_pathc > 0) {
+            for (size_t j = 0; j < glob_result.gl_pathc; j++) {
+                if (keys_add(&keys, &count, glob_result.gl_pathv[j]) != 0) {
+                    keys_free(keys, count);
+                    globfree(&glob_result);
+                    return -1;
+                }
+            }
+            globfree(&glob_result);
+        } else {
+            if (glob_ok == 0) {
+                globfree(&glob_result);
+            }
+            if (keys_add(&keys, &count, argv[i]) != 0) {
+                keys_free(keys, count);
+                return -1;
+            }
+        }
+    }
+
+    if (!isatty(fileno(stdin))) {
+        char* line = NULL;
+        size_t len = 0;
+        while (getline(&line, &len, stdin) != -1) {
+            line[strcspn(line, "\n")] = '\0';
+            if (line[0] != '\0' && keys_add(&keys, &count, line) != 0) {
+                free(line);
+                keys_free(keys, count);
+                return -1;
+            }
+        }
+        free(line);
+    }
+
+    *keys_out = keys;
+    *count_out = count;
+    return 0;
+}
+
+int line_matches_keys(const char* line, char** keys, size_t key_count) {
+    for (size_t i = 0; i < key_count; i++) {
+        if (path_matches_delete(line, keys[i])) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+int tombstone_line_at(FILE* temp_file, off_t offset, size_t line_len) {
+    char* buf = malloc(line_len);
+    if (!buf) {
+        perror("Failed to allocate memory");
+        return -1;
+    }
+    memset(buf, ' ', line_len);
+    buf[line_len - 1] = '\n';
+    if (fseek(temp_file, offset, SEEK_SET) != 0) {
+        perror("Failed to seek temp file");
+        free(buf);
+        return -1;
+    }
+    if (fwrite(buf, 1, line_len, temp_file) != line_len) {
+        perror("Failed to tombstone line");
+        free(buf);
+        return -1;
+    }
+    free(buf);
+    return 0;
+}
+
+int tombstone_hash_at(FILE* index_file, int line_index) {
+    unsigned char zero_hash[HASH_SIZE];
+    memset(zero_hash, 0, HASH_SIZE);
+    if (fseek(index_file, (long)line_index * HASH_SIZE, SEEK_SET) != 0) {
+        perror("Failed to seek index file");
+        return -1;
+    }
+    if (fwrite(zero_hash, HASH_SIZE, 1, index_file) != 1) {
+        perror("Failed to tombstone hash");
+        return -1;
+    }
+    return 0;
+}
+
+int delete_mode(int argc, char** argv, int flags) {
+    if (lock_file_exists() && !(flags & FORCE_FLAG)) {
+        fprintf(stderr, "Error: Lock file exists\n");
+        return -1;
+    }
+    if (create_lock_file(flags & FORCE_FLAG) != 0) {
+        return -1;
+    }
+
+    char** keys = NULL;
+    size_t key_count = 0;
+    if (collect_delete_targets(argc, argv, &keys, &key_count) != 0) {
+        remove_lock_file();
+        return -1;
+    }
+
+    int removed = 0;
+    if (access(temp_filename, F_OK) != -1) {
+        FILE* temp_file = fopen(temp_filename, "r+");
+        if (!temp_file) {
+            perror("Failed to open temp file");
+            keys_free(keys, key_count);
+            remove_lock_file();
+            return -1;
+        }
+        FILE* index_file = fopen(index_filename, "r+");
+        if (!index_file) {
+            perror("Failed to open index file");
+            fclose(temp_file);
+            keys_free(keys, key_count);
+            remove_lock_file();
+            return -1;
+        }
+
+        char* line = NULL;
+        size_t len = 0;
+        ssize_t read;
+        off_t offset = 0;
+        int line_index = 0;
+
+        while ((read = getline(&line, &len, temp_file)) != -1) {
+            size_t line_len = (size_t)read;
+            if (is_active_line(line) && line_matches_keys(line, keys, key_count)) {
+                if (tombstone_line_at(temp_file, offset, line_len) != 0 ||
+                    tombstone_hash_at(index_file, line_index) != 0) {
+                    free(line);
+                    fclose(temp_file);
+                    fclose(index_file);
+                    keys_free(keys, key_count);
+                    remove_lock_file();
+                    return -1;
+                }
+                removed++;
+            }
+            offset += read;
+            line_index++;
+        }
+        free(line);
+        fclose(temp_file);
+        fclose(index_file);
+    }
+
+    keys_free(keys, key_count);
+
+    if (maybe_compact() != 0) {
+        remove_lock_file();
+        return -1;
+    }
+
+    if (!(flags & QUIET_FLAG)) {
+        int active = 0;
+        int tombstones = 0;
+        count_storage(&active, &tombstones);
+        (void)tombstones;
+        printf("%d paths removed / %d paths total\n", removed, active);
+    }
+
+    remove_lock_file();
+    return 0;
+}
+
 int print_help() {
     printf("Usage: fsel [options] [paths...]\n"
            "Options:\n"
@@ -446,6 +903,7 @@ int print_help() {
            "  -u          Remove the lock file\n"
            "  -v          Validate the selection\n"
            "  -l          Long format output (like ls -l)\n"
+           "  -d          Remove paths from selection\n"
            "  -h          Show this help\n"
            "\n"
            "When no paths are provided, list mode is used by default.\n"
@@ -479,7 +937,7 @@ int main(int argc, char** argv) {
 
     int opt;
     int flags = 0;
-    while ((opt = getopt(argc, argv, "qscfruvhl")) != -1) {
+    while ((opt = getopt(argc, argv, "qscfruvhld")) != -1) {
         switch (opt) {
             case 'q':
                 flags |= QUIET_FLAG;
@@ -505,6 +963,9 @@ int main(int argc, char** argv) {
             case 'l':
                 flags |= LONG_FORMAT_FLAG;
                 break;
+            case 'd':
+                flags |= DELETE_FLAG;
+                break;
             case 'h':
                 return print_help();
             default:
@@ -524,6 +985,19 @@ int main(int argc, char** argv) {
 
     if (flags & CLEAR_FLAG && optind >= argc) {
         return clear_mode(0, NULL, flags);
+    }
+
+    if (flags & DELETE_FLAG) {
+        if (flags & REPLACE_FLAG) {
+            fprintf(stderr, "Error: incompatible options -d and -r\n");
+            return EXIT_FAILURE;
+        }
+        int has_input = !isatty(fileno(stdin));
+        if (optind >= argc && !has_input) {
+            fprintf(stderr, "Error: delete requires paths\n");
+            return EXIT_FAILURE;
+        }
+        return delete_mode(argc - optind, argv + optind, flags);
     }
 
     int has_input = !isatty(fileno(stdin));
