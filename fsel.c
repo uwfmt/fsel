@@ -12,6 +12,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+
 #define _GNU_SOURCE
 #include <errno.h>
 #include <fcntl.h>
@@ -209,6 +210,7 @@ int lock_file_exists() {
     return access(lock_filename, F_OK) == 0;
 }
 
+// Lock for the user
 int create_lock_file(int force) {
     if (force && lock_file_exists()) {
         if (unlink(lock_filename) == -1) {
@@ -318,6 +320,7 @@ void print_file_info(const char* path) {
     printf("\n");
 }
 
+// Add new path to selection
 int add_mode(int argc, char** argv, int flags) {
     if (lock_file_exists() && !(flags & FORCE_FLAG)) {
         fprintf(stderr, "Error: Lock file exists\n");
@@ -327,7 +330,6 @@ int add_mode(int argc, char** argv, int flags) {
         return -1;
     }
 
-    // Handle replace flag
     if (flags & REPLACE_FLAG) {
         FILE* temp_file = fopen(temp_filename, "w");
         if (!temp_file) {
@@ -390,6 +392,7 @@ int add_mode(int argc, char** argv, int flags) {
     return 0;
 }
 
+// List files like in "ls -l"
 int list_mode(int _, char** __, int flags) {
     (void)_;
     (void)__;
@@ -471,6 +474,7 @@ int list_mode(int _, char** __, int flags) {
     return 0;
 }
 
+// Clear selection completely
 int clear_mode(int _, char** __, int flags) {
     (void)_;
     (void)__;
@@ -487,6 +491,7 @@ int clear_mode(int _, char** __, int flags) {
     return 0;
 }
 
+// Release possibly stalled lock
 int unlock_mode(int _, char** __, int flags) {
     (void)_;
     (void)__;
@@ -510,6 +515,7 @@ int unlock_mode(int _, char** __, int flags) {
     return 0;
 }
 
+// Check that path are still exist
 int validate_mode(int _, char** __, int flags) {
     (void)_;
     (void)__;
@@ -555,6 +561,7 @@ int validate_mode(int _, char** __, int flags) {
     return (invalid_count > 0) ? 1 : 0;
 }
 
+// Remove empty lines frov previous deletions
 int compact_storage(void) {
     char temp_new[PATH_MAX];
     char index_new[PATH_MAX];
@@ -974,7 +981,6 @@ int main(int argc, char** argv) {
         }
     }
 
-    // Handle standalone flags
     if (flags & UNLOCK_FLAG) {
         return unlock_mode(0, NULL, flags);
     }
