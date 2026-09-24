@@ -362,7 +362,7 @@ int add_mode(int argc, char** argv, int flags) {
     // 1. Process command line arguments
     for (int i = 0; i < argc; i++) {
         glob_t glob_result;
-        if (glob(argv[i], GLOB_TILDE | GLOB_MARK, NULL, &glob_result) == 0) {
+        if (glob(argv[i], GLOB_TILDE | GLOB_MARK | GLOB_NOCHECK, NULL, &glob_result) == 0) {
             for (size_t j = 0; j < glob_result.gl_pathc; j++) {
                 count += process_path(glob_result.gl_pathv[j], temp_file, index_file);
             }
